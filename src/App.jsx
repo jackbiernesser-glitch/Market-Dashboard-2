@@ -526,7 +526,7 @@ function TfBar({value,onChange,options}){
 }
 
 function SectionLabel({children}){
-  return <div style={{color:"#0f1e30",fontSize:8,letterSpacing:2,marginBottom:8,fontFamily:"'Space Mono',monospace"}}>{children}</div>;
+  return <div style={{color:"#6890a8",fontSize:8,letterSpacing:2,marginBottom:8,fontFamily:"'Space Mono',monospace"}}>{children}</div>;
 }
 
 function Panel({children,style={}}){
@@ -578,7 +578,7 @@ function Gauge({value, min=0, max=100, label, sublabel, colorFn}){
         <text x={cx} y={cy+16} textAnchor="middle" fill="#e8f4f8" fontSize="11" fontFamily="'Space Mono',monospace" fontWeight="700">{typeof value==="number"?value.toFixed(1):value}</text>
       </svg>
       <div style={{color:"#a8b8c8",fontSize:10,fontFamily:"'Space Mono',monospace",marginTop:-4}}>{label}</div>
-      {sublabel&&<div style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",marginTop:2}}>{sublabel}</div>}
+      {sublabel&&<div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginTop:2}}>{sublabel}</div>}
     </div>
   );
 }
@@ -708,7 +708,7 @@ function BreadthView({breadthData}){
         {/* ── McCLELLAN OSCILLATOR ── */}
         <Panel>
           <SectionLabel>McCLELLAN OSCILLATOR</SectionLabel>
-          <div style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:6}}>+100 OVERBOUGHT · -100 OVERSOLD</div>
+          <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:6}}>+100 OVERBOUGHT · -100 OVERSOLD</div>
           <ResponsiveContainer width="100%" height={115}>
             <AreaChart data={series} margin={{top:4,right:4,bottom:0,left:0}}>
               <defs>
@@ -733,7 +733,7 @@ function BreadthView({breadthData}){
       {/* ── % ABOVE MOVING AVERAGES ── */}
       <Panel>
         <SectionLabel>% OF STOCKS ABOVE MOVING AVERAGES</SectionLabel>
-        <div style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:10}}>
+        <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:10}}>
           ABOVE 80% = OVERBOUGHT · BELOW 20% = OVERSOLD
         </div>
         <ResponsiveContainer width="100%" height={150}>
@@ -772,7 +772,7 @@ function BreadthView({breadthData}){
       {/* ── VIX ── */}
       <Panel>
         <SectionLabel>VIX — CBOE VOLATILITY INDEX</SectionLabel>
-        <div style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:10}}>
+        <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:10}}>
           {"<"}15 LOW FEAR · 15–25 NORMAL · 25–35 ELEVATED · {">"}35 EXTREME FEAR
         </div>
         <ResponsiveContainer width="100%" height={140}>
@@ -852,10 +852,10 @@ function TopMovers({allData,tf,onSelect}){
     return(
       <button onClick={()=>onSelect(asset.cat,asset.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"none",border:"none",cursor:"pointer",padding:"6px 0",borderBottom:"1px solid #1a2535",width:"100%",textAlign:"left"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <span style={{color:"#1e3045",fontSize:11,fontFamily:"'Space Mono',monospace",width:14}}>{rank}</span>
+          <span style={{color:"#6890a8",fontSize:11,fontFamily:"'Space Mono',monospace",width:14}}>{rank}</span>
           <div>
             <div style={{color:"#a8b8c8",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{asset.label}</div>
-            <div style={{color:"#162535",fontSize:9}}>{asset.sector}{asset.isLive?" · LIVE":" · SIM"}</div>
+            <div style={{color:"#6890a8",fontSize:9}}>{asset.sector}{asset.isLive?" · LIVE":" · SIM"}</div>
           </div>
         </div>
         <div style={{textAlign:"right"}}>
@@ -887,7 +887,7 @@ function MarketCard({asset,tf,color,isSelected,isWatched,onSelect,onWatch}){
       <button onClick={onSelect} style={{width:"100%",background:isSelected?"#152030":"#0d1420",border:`1px solid ${isSelected?color:"#1a2535"}`,borderRadius:10,padding:"13px 13px 9px",cursor:"pointer",textAlign:"left",transition:"all 0.15s",outline:"none",boxShadow:isSelected?`0 0 16px ${color}18`:"none"}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
           <span style={{color:"#2a4a65",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
-            {asset.label} {asset.isLive?<span style={{color:"#22c55e",fontSize:8}}>●</span>:<span style={{color:"#1e3045",fontSize:8}}>○</span>}
+            {asset.label} {asset.isLive?<span style={{color:"#22c55e",fontSize:8}}>●</span>:<span style={{color:"#6890a8",fontSize:8}}>○</span>}
           </span>
           <span style={{color:lc,fontSize:9,background:up?"#7dd3f012":"#ff5f6d12",padding:"1px 5px",borderRadius:3,fontFamily:"'Space Mono',monospace"}}>{up?"+":""}{p.toFixed(2)}%</span>
         </div>
@@ -920,14 +920,14 @@ function DetailChart({asset,tf}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
         <div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-            <div style={{color:"#162535",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>{asset.sector?.toUpperCase()} · {asset.label}</div>
+            <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>{asset.sector?.toUpperCase()} · {asset.label}</div>
             <div style={{fontSize:9,fontFamily:"'Space Mono',monospace",color:asset.isLive?"#22c55e":"#1e3045",background:asset.isLive?"#22c55e12":"#1e304512",padding:"1px 6px",borderRadius:3}}>{asset.isLive?"● LIVE":"○ SIMULATED"}</div>
           </div>
           <div style={{color:"#f1f5f9",fontSize:24,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:-1}}>{fmt(last,asset.unit,asset)}</div>
         </div>
         <div style={{textAlign:"right"}}>
           <div style={{color:lc,fontSize:16,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{up?"▲ +":"▼ "}{p.toFixed(2)}%</div>
-          <div style={{color:"#0f1e30",fontSize:9,marginTop:4,fontFamily:"'Space Mono',monospace"}}>H {fmt(high,asset.unit,asset)} · L {fmt(low,asset.unit,asset)}</div>
+          <div style={{color:"#6890a8",fontSize:9,marginTop:4,fontFamily:"'Space Mono',monospace"}}>H {fmt(high,asset.unit,asset)} · L {fmt(low,asset.unit,asset)}</div>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={200}>
@@ -1030,7 +1030,7 @@ function HeatmapView({heatData, ndxData, tf}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,fontFamily:"'Space Mono',monospace",fontSize:10}}>
           <button onClick={()=>setDrillSector(null)} style={{background:"none",border:"none",cursor:"pointer",color:drillSector?"#7dd3f0":"#e8f4f8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:0,letterSpacing:1}}>{indexLabel} SECTORS</button>
-          {drillSector&&<><span style={{color:"#162535"}}>›</span><span style={{color:"#e8f4f8",letterSpacing:1}}>{sector?.label.toUpperCase()}</span></>}
+          {drillSector&&<><span style={{color:"#6890a8"}}>›</span><span style={{color:"#e8f4f8",letterSpacing:1}}>{sector?.label.toUpperCase()}</span></>}
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {/* color legend */}
@@ -1071,7 +1071,7 @@ function HeatmapView({heatData, ndxData, tf}){
         </div>
       ) : (
         <div>
-          <div style={{color:"#162535",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:2,marginBottom:10}}>
+          <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:2,marginBottom:10}}>
             {sector.stocks.length} STOCKS · CLICK SECTOR NAME ABOVE TO GO BACK
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8}}>
@@ -1089,7 +1089,7 @@ function HeatmapView({heatData, ndxData, tf}){
                   <div>
                     <div style={{color:"#2a4a65",fontSize:10,fontFamily:"'Space Mono',monospace",marginBottom:2}}>${stock.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
                     <div style={{color:heatTextColor(change),fontSize:16,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{up?"+":""}{change.toFixed(2)}%</div>
-                    <div style={{color:"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{stock.symbol}</div>
+                    <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{stock.symbol}</div>
                   </div>
                 </div>
               );
@@ -1101,7 +1101,7 @@ function HeatmapView({heatData, ndxData, tf}){
       {/* ── SUMMARY BAR CHART — all sectors, active TF ── */}
       <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"16px 16px 8px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>
+          <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>
             {drillSector ? `${sector?.label.toUpperCase()} — STOCKS · ${tf} % CHANGE` : `ALL SECTORS — ${tf} % CHANGE`}
           </div>
           {/* TF legend */}
@@ -1147,7 +1147,7 @@ function HeatmapView({heatData, ndxData, tf}){
       {/* ── DRILLDOWN MULTI-TF CHART — shown when sector is selected ── */}
       {drillSector && (
         <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"16px 16px 8px"}}>
-          <div style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2,marginBottom:12}}>
+          <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2,marginBottom:12}}>
             {sector?.label.toUpperCase()} — ALL TIMEFRAMES COMPARISON
           </div>
           <ResponsiveContainer width="100%" height={200}>
@@ -1198,11 +1198,11 @@ function HeatmapView({heatData, ndxData, tf}){
           <div style={{color:"#a8b8c8",marginBottom:4}}>{tooltip.item.label}</div>
           {HEATMAP_TFS.map(t=>{const c=tooltip.item.changes[t],up=c>=0;return(
             <div key={t} style={{display:"flex",justifyContent:"space-between",gap:16,marginBottom:2}}>
-              <span style={{color:"#162535"}}>{t}</span>
+              <span style={{color:"#6890a8"}}>{t}</span>
               <span style={{color:up?"#7dd3f0":"#ff5f6d"}}>{up?"+":""}{c.toFixed(2)}%</span>
             </div>
           );})}
-          {tooltip.isSector&&<div style={{color:"#0f1e30",fontSize:8,marginTop:4}}>CLICK TO DRILL DOWN</div>}
+          {tooltip.isSector&&<div style={{color:"#6890a8",fontSize:8,marginTop:4}}>CLICK TO DRILL DOWN</div>}
         </div>
       )}
     </div>
@@ -1219,7 +1219,7 @@ function WatchlistPanel({allData,watchlist,tf,onSelect,onRemove}){
     <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"14px 16px"}}>
       <div style={{color:"#f59e0b",fontSize:9,letterSpacing:2,marginBottom:10,fontFamily:"'Space Mono',monospace"}}>★ WATCHLIST</div>
       {watched.length===0
-        ?<div style={{color:"#0f1e30",fontSize:11,fontFamily:"'Space Mono',monospace",padding:"8px 0"}}>Star any asset to add it here</div>
+        ?<div style={{color:"#6890a8",fontSize:11,fontFamily:"'Space Mono',monospace",padding:"8px 0"}}>Star any asset to add it here</div>
         :watched.map(a=>{
           const p=pct(a.histories[tf]),up=p>=0,last=currentPrice(a,tf);
           return(
@@ -1231,7 +1231,7 @@ function WatchlistPanel({allData,watchlist,tf,onSelect,onRemove}){
               <div style={{display:"flex",alignItems:"center",gap:14}}>
                 <span style={{color:"#2a4a65",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{fmt(last,a.unit,a)}</span>
                 <span style={{color:up?"#7dd3f0":"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",minWidth:56,textAlign:"right"}}>{up?"+":""}{p.toFixed(2)}%</span>
-                <button onClick={e=>{e.stopPropagation();onRemove(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#162535",fontSize:11,padding:0}}>✕</button>
+                <button onClick={e=>{e.stopPropagation();onRemove(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#6890a8",fontSize:11,padding:0}}>✕</button>
               </div>
             </button>
           );
@@ -1387,7 +1387,7 @@ function NewsView({newsData, calData}) {
       }}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
           <span style={{background:(TAG_COL[item.tag]||"#1e3045")+"22",color:TAG_COL[item.tag]||"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace",padding:"1px 6px",borderRadius:3,letterSpacing:1}}>{item.tag}</span>
-          <span style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{item.source}</span>
+          <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{item.source}</span>
           {item.isLive&&<span style={{color:"#22c55e",fontSize:7,marginLeft:2}}>● LIVE</span>}
           <span style={{color:"#0f1f2e",fontSize:8,fontFamily:"'Space Mono',monospace",marginLeft:"auto"}}>{item.time}</span>
         </div>
@@ -1443,7 +1443,7 @@ function NewsView({newsData, calData}) {
                 }}
               />
               {searchInput && (
-                <button onClick={clearSearch} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#1e3045",cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>✕</button>
+                <button onClick={clearSearch} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#6890a8",cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>✕</button>
               )}
             </div>
             <button onClick={handleSearch} disabled={searching} style={{background:MAIN_COL+"22",border:`1px solid ${MAIN_COL}`,color:MAIN_COL,borderRadius:10,padding:"10px 20px",cursor:searching?"not-allowed":"pointer",fontSize:10,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s",opacity:searching?0.6:1}}>
@@ -1454,7 +1454,7 @@ function NewsView({newsData, calData}) {
           {/* Quick picks */}
           {!searchQuery && (
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>QUICK PICKS</div>
+              <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>QUICK PICKS</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {["AAPL","TSLA","NVDA","MSFT","AMZN","JPM","BTC","ETH","FOREX","CRYPTO"].map(t=>(
                   <button key={t} onClick={()=>{setSearchInput(t);setTimeout(()=>{setSearchInput(t);},0);}} style={{background:"#0d1420",border:"1px solid #1a2535",color:"#6890a8",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>
@@ -1462,7 +1462,7 @@ function NewsView({newsData, calData}) {
                   </button>
                 ))}
               </div>
-              <div style={{color:"#080f18",fontSize:9,fontFamily:"'Space Mono',monospace",marginTop:4}}>
+              <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",marginTop:4}}>
                 Enter a US stock ticker for live company news via Finnhub, or try FOREX / CRYPTO for category news.
               </div>
             </div>
@@ -1473,7 +1473,7 @@ function NewsView({newsData, calData}) {
             <div style={{background:"#0d0a06",border:"1px solid #c8dff033",borderRadius:10,padding:"16px 18px",fontFamily:"'Space Mono',monospace"}}>
               <div style={{color:"#c8dff0",fontSize:10,marginBottom:8,letterSpacing:1}}>⚠ SEARCH NOTE</div>
               <div style={{color:"#2a4a65",fontSize:10,lineHeight:1.8}}>{searchError}</div>
-              <div style={{color:"#162535",fontSize:9,marginTop:10,lineHeight:1.7}}>
+              <div style={{color:"#6890a8",fontSize:9,marginTop:10,lineHeight:1.7}}>
                 The Claude.ai preview sandbox restricts some outbound API calls. Once you deploy this to Vercel, ticker search will work fully. In the meantime, the Headlines and Eco Calendar tabs use your Finnhub key normally.
               </div>
             </div>
@@ -1482,7 +1482,7 @@ function NewsView({newsData, calData}) {
           {/* Search results */}
           {searchQuery && !searchError && searchResults !== null && (
             <>
-              <div style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>
+              <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>
                 {searching ? "FETCHING…" : `${searchResults.length} RESULTS FOR "${searchQuery}" ${searchResults[0]?.isLive?"· ● LIVE DATA":"· ○ NO RESULTS"}`}
               </div>
               {searchResults.length > 0 && (
@@ -1503,7 +1503,7 @@ function NewsView({newsData, calData}) {
         <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:12,alignItems:"start"}}>
           <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
             {displayNews.length===0
-              ? <div style={{color:"#0f1e30",fontSize:11,padding:"20px 16px",fontFamily:"'Space Mono',monospace"}}>No stories for this filter</div>
+              ? <div style={{color:"#6890a8",fontSize:11,padding:"20px 16px",fontFamily:"'Space Mono',monospace"}}>No stories for this filter</div>
               : displayNews.map(item=><HeadlineItem key={item.id} item={item}/>)
             }
           </div>
@@ -1516,7 +1516,7 @@ function NewsView({newsData, calData}) {
         <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"60px 80px 1fr 70px 70px 70px",gap:0,padding:"8px 16px",borderBottom:"1px solid #1a2535",background:"#0a0e14"}}>
             {["TIME","DATE","EVENT","ACTUAL","FORECAST","PRIOR"].map(h=>(
-              <div key={h} style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>{h}</div>
+              <div key={h} style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>{h}</div>
             ))}
           </div>
           {calData.map((ev,i)=>{
@@ -1524,14 +1524,14 @@ function NewsView({newsData, calData}) {
             return(
               <div key={ev.id} style={{display:"grid",gridTemplateColumns:"60px 80px 1fr 70px 70px 70px",gap:0,padding:"10px 16px",borderBottom:"1px solid #1a2535",background:i%2===0?"#0d1420":"#060d14",borderLeft:`2px solid ${impactCol}55`}}>
                 <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.time}</div>
-                <div style={{color:"#1e3045",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.date}</div>
+                <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.date}</div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <div style={{width:6,height:6,borderRadius:"50%",background:impactCol,flexShrink:0}}/>
                   <div style={{color:hasActual?"#a8b8c8":"#2a4a65",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.title}</div>
                 </div>
                 <div style={{color:hasActual?MAIN_COL:"#162535",fontSize:10,fontFamily:"'Space Mono',monospace",fontWeight:hasActual?"700":"400"}}>{ev.actual}</div>
-                <div style={{color:"#1e3045",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.forecast}</div>
-                <div style={{color:"#162535",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.prior}</div>
+                <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.forecast}</div>
+                <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.prior}</div>
               </div>
             );
           })}
@@ -1539,7 +1539,7 @@ function NewsView({newsData, calData}) {
             {[["high","#ff5f6d","High Impact"],["medium","#c8dff0","Medium"],["low","#7dd3f0","Low"]].map(([k,col,lbl])=>(
               <div key={k} style={{display:"flex",alignItems:"center",gap:5}}>
                 <div style={{width:6,height:6,borderRadius:"50%",background:col}}/>
-                <span style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{lbl}</span>
+                <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{lbl}</span>
               </div>
             ))}
           </div>
@@ -1557,7 +1557,7 @@ function ArticlePreview({item}) {
         <span style={{background:(TAG_COL[item.tag]||"#1e3045")+"22",color:TAG_COL[item.tag]||"#2a4a65",fontSize:9,fontFamily:"'Space Mono',monospace",padding:"2px 8px",borderRadius:4,letterSpacing:1}}>{item.tag}</span>
         <span style={{color:"#2a4a65",fontSize:9,fontFamily:"'Space Mono',monospace"}}>{item.source}</span>
         {item.isLive&&<span style={{color:"#22c55e",fontSize:8,fontFamily:"'Space Mono',monospace"}}>● LIVE</span>}
-        <span style={{color:"#0f1e30",fontSize:9,fontFamily:"'Space Mono',monospace",marginLeft:"auto"}}>{item.time}</span>
+        <span style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",marginLeft:"auto"}}>{item.time}</span>
       </div>
       <div style={{color:"#e8f4f8",fontSize:14,fontFamily:"'Space Mono',monospace",fontWeight:700,lineHeight:1.6,marginBottom:16}}>
         {item.title}
@@ -1572,7 +1572,7 @@ function ArticlePreview({item}) {
         </a>
       )}
       <div style={{marginTop:16,paddingTop:12,borderTop:"1px solid #1a2535",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
+        <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
           {item.isLive?"● LIVE DATA VIA FINNHUB":"○ SIMULATED CONTENT · DEMO ONLY"}
         </span>
         <div style={{width:6,height:6,borderRadius:"50%",background:item.isLive?"#22c55e":MAIN_COL,boxShadow:`0 0 6px ${item.isLive?"#22c55e":MAIN_COL}`}}/>
@@ -1813,7 +1813,7 @@ function FactorView({ factorData }) {
                 );
               })}
             </div>
-            <div style={{color:"#080f18",fontSize:8,fontFamily:"'Space Mono',monospace",textAlign:"center",marginTop:8}}>CLICK ANY GAUGE TO DRILL DOWN</div>
+            <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",textAlign:"center",marginTop:8}}>CLICK ANY GAUGE TO DRILL DOWN</div>
           </Panel>
 
           {/* All factors relative performance chart */}
@@ -1865,11 +1865,11 @@ function FactorView({ factorData }) {
                 const barW=Math.min(100,Math.abs(f.level_axis)*8);
                 return(
                   <button key={f.id} onClick={()=>{setActiveF(f.id);setSubview("drilldown");}} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",background:"none",border:"none",borderBottom:"1px solid #1a2535",cursor:"pointer",textAlign:"left",width:"100%"}}>
-                    <span style={{color:"#1e3045",fontSize:11,fontFamily:"'Space Mono',monospace",width:16,flexShrink:0}}>{i+1}</span>
+                    <span style={{color:"#6890a8",fontSize:11,fontFamily:"'Space Mono',monospace",width:16,flexShrink:0}}>{i+1}</span>
                     <div style={{width:10,height:10,borderRadius:"50%",background:f.color,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{color:"#a8b8c8",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{f.label}</div>
-                      <div style={{color:"#162535",fontSize:8,marginTop:1}}>{etf.ticker} · {etf.name}</div>
+                      <div style={{color:"#6890a8",fontSize:8,marginTop:1}}>{etf.ticker} · {etf.name}</div>
                     </div>
                     {/* bar */}
                     <div style={{width:120,height:6,background:"#1a2535",borderRadius:3,overflow:"hidden",flexShrink:0}}>
@@ -1882,8 +1882,8 @@ function FactorView({ factorData }) {
               })}
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",gap:16,marginTop:8}}>
-              <span style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}}>← UNDERPERFORM · BAR · OUTPERFORM →</span>
-              <span style={{color:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}}>SCORE 0–100</span>
+              <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>← UNDERPERFORM · BAR · OUTPERFORM →</span>
+              <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>SCORE 0–100</span>
             </div>
           </Panel>
         </>
@@ -1895,7 +1895,7 @@ function FactorView({ factorData }) {
           {/* Factor selector */}
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {FACTORS.map(f=>(
-              <button key={f.id} onClick={()=>setActiveF(f.id)} style={{background:activeF===f.id?f.color+"22":"none",border:`1px solid ${activeF===f.id?f.color:"#1a2535"}`,color:activeF===f.id?f.color:"#162535",borderRadius:8,padding:"4px 14px",cursor:"pointer",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>
+              <button key={f.id} onClick={()=>setActiveF(f.id)} style={{background:activeF===f.id?f.color+"22":"none",border:`1px solid ${activeF===f.id?f.color:"#1a2535"}`,color:activeF===f.id?f.color:"#6890a8",borderRadius:8,padding:"4px 14px",cursor:"pointer",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>
                 {f.label}
               </button>
             ))}
@@ -1907,11 +1907,11 @@ function FactorView({ factorData }) {
               <div>
                 <div style={{color:selFactor.color,fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:1,marginBottom:4}}>{selFactor.label.toUpperCase()}</div>
                 <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{selFactor.desc}</div>
-                <div style={{color:"#162535",fontSize:9,marginTop:4,fontFamily:"'Space Mono',monospace"}}>ETF PROXY: {FACTOR_ETFS[activeF].ticker} · {FACTOR_ETFS[activeF].name}</div>
+                <div style={{color:"#6890a8",fontSize:9,marginTop:4,fontFamily:"'Space Mono',monospace"}}>ETF PROXY: {FACTOR_ETFS[activeF].ticker} · {FACTOR_ETFS[activeF].name}</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{color:relUp?"#7dd3f0":"#ff5f6d",fontSize:18,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{relUp?"+":""}{relChange.toFixed(2)}%</div>
-                <div style={{color:"#0f1e30",fontSize:9,fontFamily:"'Space Mono',monospace"}}>VS S&P 500 · {tf}</div>
+                <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace"}}>VS S&P 500 · {tf}</div>
               </div>
             </div>
           </Panel>
@@ -1996,7 +1996,7 @@ function FactorView({ factorData }) {
       {subview==="rotation" && (
         <Panel>
           <SectionLabel>FACTOR ROTATION — MOMENTUM (X) vs RELATIVE LEVEL (Y)</SectionLabel>
-          <div style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:14,lineHeight:1.7}}>
+          <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:14,lineHeight:1.7}}>
             RIGHT = accelerating outperformance · LEFT = decelerating · UP = outperforming S&P · DOWN = underperforming
           </div>
           <div style={{position:"relative",height:380,background:"#0a0e14",borderRadius:10,border:"1px solid #1a2535",overflow:"hidden"}}>
@@ -2013,8 +2013,8 @@ function FactorView({ factorData }) {
               <div key={i} style={{position:"absolute",top:q.t,bottom:q.b,left:q.l,right:q.r,color:q.col,fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1,opacity:0.5}}>{q.label}</div>
             ))}
             {/* Axis labels */}
-            <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>MOMENTUM →</div>
-            <div style={{position:"absolute",top:"50%",left:6,transform:"translateY(-50%) rotate(-90deg)",color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1,transformOrigin:"center"}}>LEVEL ↑</div>
+            <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>MOMENTUM →</div>
+            <div style={{position:"absolute",top:"50%",left:6,transform:"translateY(-50%) rotate(-90deg)",color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1,transformOrigin:"center"}}>LEVEL ↑</div>
             {/* Factor dots */}
             {rotation.map(f => {
               // Map to pixel coordinates — center = 50%
@@ -2040,7 +2040,7 @@ function FactorView({ factorData }) {
               );
             })}
           </div>
-          <div style={{color:"#080f18",fontSize:9,fontFamily:"'Space Mono',monospace",textAlign:"center",marginTop:10}}>CLICK ANY FACTOR TO DRILL DOWN · POSITIONS ARE SIMULATED</div>
+          <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",textAlign:"center",marginTop:10}}>CLICK ANY FACTOR TO DRILL DOWN · POSITIONS ARE SIMULATED</div>
         </Panel>
       )}
 
@@ -2398,7 +2398,7 @@ function ScreenerView() {
               ? <span style={{color:"#7dd3f0",fontSize:8,letterSpacing:1}}>● LIVE DATA</span>
               : liveStatus==="loading"
               ? <span style={{color:"#c8dff0",fontSize:8,letterSpacing:1}}>◌ LOADING LIVE DATA {liveProgress}%</span>
-              : <span style={{color:"#1e3045",fontSize:8,letterSpacing:1}}>○ SIMULATED DATA</span>
+              : <span style={{color:"#6890a8",fontSize:8,letterSpacing:1}}>○ SIMULATED DATA</span>
             }
           </div>
         </div>
@@ -2420,13 +2420,13 @@ function ScreenerView() {
           </button>
           <span style={{color:"#2a4a65",fontSize:10}}>|</span>
           <span style={{color:sorted.length>0?"#7dd3f0":"#ff5f6d",fontSize:10,fontWeight:700}}>{sorted.length}</span>
-          <span style={{color:"#0f1e30",fontSize:8}}>{showPassing?"PASSING":"TOTAL"}</span>
+          <span style={{color:"#6890a8",fontSize:8}}>{showPassing?"PASSING":"TOTAL"}</span>
         </div>
       </div>
 
       {/* ── CRITERIA PANEL ── */}
       <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"14px 16px"}}>
-        <div style={{color:"#0f1e30",fontSize:8,letterSpacing:2,marginBottom:12}}>SCREENING CRITERIA</div>
+        <div style={{color:"#6890a8",fontSize:8,letterSpacing:2,marginBottom:12}}>SCREENING CRITERIA</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:16}}>
 
           {/* Criterion 1 */}
@@ -2438,7 +2438,7 @@ function ScreenerView() {
             <input type="range" min={0.5} max={10} step={0.5} value={maxPctFromEMA}
               onChange={e=>setMaxPctFromEMA(+e.target.value)}
               style={{width:"100%",accentColor:"#7dd3f0"}}/>
-            <div style={{color:"#0f1e30",fontSize:7,marginTop:3}}>Price within this % band of the 21 EMA</div>
+            <div style={{color:"#6890a8",fontSize:7,marginTop:3}}>Price within this % band of the 21 EMA</div>
           </div>
 
           {/* Criterion 2 */}
@@ -2450,7 +2450,7 @@ function ScreenerView() {
             <input type="range" min={0} max={2} step={0.1} value={minSlope}
               onChange={e=>setMinSlope(+e.target.value)}
               style={{width:"100%",accentColor:"#7dd3f0"}}/>
-            <div style={{color:"#0f1e30",fontSize:7,marginTop:3}}>EMA must be rising by at least this % over 5 days</div>
+            <div style={{color:"#6890a8",fontSize:7,marginTop:3}}>EMA must be rising by at least this % over 5 days</div>
           </div>
 
           {/* Criterion 3 — RSI band */}
@@ -2467,7 +2467,7 @@ function ScreenerView() {
                 onChange={e=>setMaxRSI(+e.target.value)}
                 style={{flex:1,accentColor:"#ff5f6d"}}/>
             </div>
-            <div style={{color:"#0f1e30",fontSize:7,marginTop:3}}>Filters out overbought / oversold extremes</div>
+            <div style={{color:"#6890a8",fontSize:7,marginTop:3}}>Filters out overbought / oversold extremes</div>
           </div>
 
           {/* Criterion 4 — Type + Sector */}
@@ -2504,7 +2504,7 @@ function ScreenerView() {
           ].map(({col,label})=>(
             <div key={label} style={{display:"flex",alignItems:"center",gap:5}}>
               <div style={{width:8,height:8,borderRadius:2,background:col,flexShrink:0}}/>
-              <span style={{color:"#162535",fontSize:7}}>{label}</span>
+              <span style={{color:"#6890a8",fontSize:7}}>{label}</span>
             </div>
           ))}
         </div>
@@ -2512,7 +2512,7 @@ function ScreenerView() {
 
       {/* ── RESULTS TABLE ── */}
       {sorted.length === 0 ? (
-        <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"32px",textAlign:"center",color:"#162535",fontSize:10,letterSpacing:1}}>
+        <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"32px",textAlign:"center",color:"#6890a8",fontSize:10,letterSpacing:1}}>
           NO RESULTS — TRY LOOSENING THE CRITERIA
         </div>
       ) : (
@@ -2533,7 +2533,7 @@ function ScreenerView() {
                   <Th col="rsi"             label="RSI"          title="14-day RSI"/>
                   <Th col="pctFrom52Hi"     label="52W HIGH"     title="% below 52-week high"/>
                   <Th col="pullbackQuality" label="QUALITY"      title="Combined signal score 0–100"/>
-                  <th style={{padding:"8px 10px",color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",borderBottom:"1px solid #1a2535",background:"#0a0e14",position:"sticky",top:0}}>CHART</th>
+                  <th style={{padding:"8px 10px",color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",borderBottom:"1px solid #1a2535",background:"#0a0e14",position:"sticky",top:0}}>CHART</th>
                 </tr>
               </thead>
               <tbody>
@@ -2604,9 +2604,9 @@ function ScreenerView() {
                 <span style={{color:"#6890a8",fontSize:10}}>{selData.name}</span>
                 <span style={{color:selData.chg1D>=0?"#7dd3f0":"#ff5f6d",fontSize:12,fontWeight:700}}>{selData.chg1D>=0?"+":""}{selData.chg1D}%</span>
               </div>
-              <div style={{color:"#162535",fontSize:8,marginTop:3}}>{selData.sector} · {selData.type}</div>
+              <div style={{color:"#6890a8",fontSize:8,marginTop:3}}>{selData.sector} · {selData.type}</div>
             </div>
-            <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:"#162535",fontSize:14,cursor:"pointer"}}>✕</button>
+            <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:"#6890a8",fontSize:14,cursor:"pointer"}}>✕</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8,marginBottom:14}}>
             {[
@@ -2620,13 +2620,13 @@ function ScreenerView() {
               {label:"52W High",     val:`${selData.pctFrom52Hi}%`,                   col:"#6890a8"},
             ].map(({label,val,col})=>(
               <div key={label} style={{background:"#0a0e14",borderRadius:8,padding:"10px 12px",border:"1px solid #1a2535"}}>
-                <div style={{color:"#0f1e30",fontSize:7,marginBottom:3,letterSpacing:1}}>{label}</div>
+                <div style={{color:"#6890a8",fontSize:7,marginBottom:3,letterSpacing:1}}>{label}</div>
                 <div style={{color:col,fontSize:13,fontWeight:700}}>{val}</div>
               </div>
             ))}
           </div>
           {/* 30-day close chart with EMA overlay */}
-          <div style={{color:"#0f1e30",fontSize:8,letterSpacing:1,marginBottom:8}}>30-DAY PRICE vs 21 EMA</div>
+          <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:8}}>30-DAY PRICE vs 21 EMA</div>
           <ResponsiveContainer width="100%" height={120}>
             <LineChart data={selData.closes.slice(-30).map((c,i)=>({i,price:c,ema21:calcEMA(selData.closes,21)[selData.closes.length-30+i]}))} margin={{top:4,right:4,bottom:0,left:0}}>
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
@@ -2797,7 +2797,7 @@ function PerfBars({ perf }) {
         const barW=Math.min(100, (Math.abs(v)/max)*100);
         return(
           <div key={t} style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{color:"#162535",fontSize:7,fontFamily:"'Space Mono',monospace",width:24,flexShrink:0,textAlign:"right"}}>{t}</span>
+            <span style={{color:"#6890a8",fontSize:7,fontFamily:"'Space Mono',monospace",width:24,flexShrink:0,textAlign:"right"}}>{t}</span>
             <div style={{flex:1,height:5,background:"#1a2535",borderRadius:3,overflow:"hidden",position:"relative"}}>
               <div style={{
                 position:"absolute",
@@ -2838,17 +2838,17 @@ function RSCard({ item, benchmark, rank }) {
           <div style={{color:"#e8f4f8",fontSize:11,fontWeight:700,letterSpacing:0.5}}>{item.label}</div>
           <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
             <span style={{color:strengthCol,fontSize:7,fontWeight:700,letterSpacing:1,background:strengthCol+"18",padding:"1px 5px",borderRadius:3}}>{strength}</span>
-            <span style={{color:"#162535",fontSize:7}}>RS AVG: {rsAvg}</span>
+            <span style={{color:"#6890a8",fontSize:7}}>RS AVG: {rsAvg}</span>
           </div>
         </div>
         <div style={{background:"#1a2535",borderRadius:6,width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          <span style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace",fontWeight:700}}>#{rank}</span>
+          <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",fontWeight:700}}>#{rank}</span>
         </div>
       </div>
 
       {/* leaders */}
       <div>
-        <div style={{color:"#0f1e30",fontSize:7,fontFamily:"'Space Mono',monospace",letterSpacing:1,marginBottom:4}}>LEADERS</div>
+        <div style={{color:"#6890a8",fontSize:7,fontFamily:"'Space Mono',monospace",letterSpacing:1,marginBottom:4}}>LEADERS</div>
         <div style={{background:"#1a2535",borderRadius:6,padding:"5px 8px",display:"flex",flexWrap:"wrap",gap:4}}>
           {item.leaders.slice(0,5).map(t=>(
             <span key={t} style={{color:"#7dd3f0",fontSize:8,fontFamily:"'Space Mono',monospace"}}>${t}</span>
@@ -2858,13 +2858,13 @@ function RSCard({ item, benchmark, rank }) {
 
       {/* setups */}
       <div>
-        <div style={{color:"#0f1e30",fontSize:7,fontFamily:"'Space Mono',monospace",letterSpacing:1,marginBottom:4}}>SETTING UP</div>
+        <div style={{color:"#6890a8",fontSize:7,fontFamily:"'Space Mono',monospace",letterSpacing:1,marginBottom:4}}>SETTING UP</div>
         <div style={{background:"#1a2535",borderRadius:6,padding:"5px 8px",display:"flex",flexWrap:"wrap",gap:4,minHeight:24}}>
           {item.setups.length>0
             ? item.setups.slice(0,5).map(t=>(
                 <span key={t} style={{color:"#a8b8c8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>${t}</span>
               ))
-            : <span style={{color:"#162535",fontSize:8,fontFamily:"'Space Mono',monospace"}}>N/A</span>
+            : <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>N/A</span>
           }
         </div>
       </div>
@@ -2877,7 +2877,7 @@ function RSCard({ item, benchmark, rank }) {
         {[["#b8e8ff","RS"],["#c8dff0","Vol-Adj RS"]].map(([col,lbl])=>(
           <div key={lbl} style={{display:"flex",alignItems:"center",gap:4}}>
             <div style={{width:10,height:3,background:col,borderRadius:1}}/>
-            <span style={{color:"#162535",fontSize:7,fontFamily:"'Space Mono',monospace"}}>{lbl}</span>
+            <span style={{color:"#6890a8",fontSize:7,fontFamily:"'Space Mono',monospace"}}>{lbl}</span>
           </div>
         ))}
       </div>
@@ -2949,7 +2949,7 @@ function ThemesRSView() {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div>
           <div style={{color:"#e8f4f8",fontSize:14,fontWeight:700,letterSpacing:2}}>THEMES, SECTORS & SUB MARKETS</div>
-          <div style={{color:"#0f1e30",fontSize:8,marginTop:2,letterSpacing:1}}>RELATIVE STRENGTH RADAR · SIMULATED</div>
+          <div style={{color:"#6890a8",fontSize:8,marginTop:2,letterSpacing:1}}>RELATIVE STRENGTH RADAR · SIMULATED</div>
         </div>
         {/* sub-view tabs */}
         <div style={{display:"flex",gap:0,background:"#0d1420",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
@@ -2966,7 +2966,7 @@ function ThemesRSView() {
       <RSControls sort={sort} setSort={setSort} benchmark={benchmark} setBenchmark={setBenchmark} search={search} setSearch={setSearch}/>
 
       {/* count */}
-      <div style={{color:"#0f1e30",fontSize:8,letterSpacing:1}}>{filtered.length} {subview.toUpperCase()} · BENCHMARK: {benchmark==="spx"?"S&P 500":"NASDAQ 100"}</div>
+      <div style={{color:"#6890a8",fontSize:8,letterSpacing:1}}>{filtered.length} {subview.toUpperCase()} · BENCHMARK: {benchmark==="spx"?"S&P 500":"NASDAQ 100"}</div>
 
       {/* grid */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
@@ -3109,15 +3109,15 @@ function FundMetric({ label, value, fmt, benchmark, benchmarkLabel, goodHigh = t
 
   return (
     <div style={{background:"#0a0e14",borderRadius:8,padding:small?"8px 10px":"11px 14px",border:"1px solid #1a2535",display:"flex",flexDirection:"column",gap:3}}>
-      <div style={{color:"#0f1e30",fontSize:7,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{label}</div>
+      <div style={{color:"#6890a8",fontSize:7,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{label}</div>
       <div style={{color:valCol,fontSize:small?13:16,fontWeight:700,fontFamily:"'Space Mono',monospace"}}>{fmtVal(value)}</div>
       {benchmark != null && (
-        <div style={{color:"#162535",fontSize:7,fontFamily:"'Space Mono',monospace"}}>
+        <div style={{color:"#6890a8",fontSize:7,fontFamily:"'Space Mono',monospace"}}>
           IND AVG: {fmtVal(benchmark)}
           {vsInd !== null && <span style={{color:vsInd?"#7dd3f088":"#ff5f6d88",marginLeft:4}}>{vsInd?"▲ ABOVE":"▼ BELOW"}</span>}
         </div>
       )}
-      {benchmarkLabel && <div style={{color:"#0f1e30",fontSize:7}}>{benchmarkLabel}</div>}
+      {benchmarkLabel && <div style={{color:"#6890a8",fontSize:7}}>{benchmarkLabel}</div>}
     </div>
   );
 }
@@ -3157,7 +3157,7 @@ function MarginBar({ label, value, prev, max = 100, color = "#7dd3f0" }) {
         <div style={{position:"absolute",left:0,top:0,width:`${pct}%`,height:"100%",background:color,borderRadius:3,transition:"width 0.4s"}}/>
       </div>
       {prev!=null&&(
-        <div style={{color:"#0f1e30",fontSize:7,fontFamily:"'Space Mono',monospace",marginTop:2}}>
+        <div style={{color:"#6890a8",fontSize:7,fontFamily:"'Space Mono',monospace",marginTop:2}}>
           PRIOR YEAR: {prev.toFixed(1)}%
         </div>
       )}
@@ -3334,7 +3334,7 @@ function FundamentalsView() {
       </div>
 
       {loading ? (
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:200,color:"#162535",fontSize:10,letterSpacing:2}}>LOADING {symbol}…</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:200,color:"#6890a8",fontSize:10,letterSpacing:2}}>LOADING {symbol}…</div>
       ) : (
         <>
           {/* ── TICKER HEADER ── */}
@@ -3348,7 +3348,7 @@ function FundamentalsView() {
                 <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
                   <span style={{background:"#7dd3f018",color:"#7dd3f0",fontSize:7,padding:"2px 7px",borderRadius:3,letterSpacing:1}}>{d.sector}</span>
                   <span style={{background:"#b8e8ff18",color:"#b8e8ff",fontSize:7,padding:"2px 7px",borderRadius:3,letterSpacing:1}}>{d.industry}</span>
-                  <span style={{color:"#162535",fontSize:8}}>MKT CAP: <span style={{color:"#a8b8c8"}}>${d.mktCap.toFixed(0)}B</span></span>
+                  <span style={{color:"#6890a8",fontSize:8}}>MKT CAP: <span style={{color:"#a8b8c8"}}>${d.mktCap.toFixed(0)}B</span></span>
                 </div>
               </div>
               {/* Key snapshot */}
@@ -3362,7 +3362,7 @@ function FundamentalsView() {
                   {l:"NET MGN",v:`${d.netMargin.toFixed(1)}%`,        col: d.netMargin > d.ind.netMargin ? upColor : downColor},
                 ].map(({l,v,col})=>(
                   <div key={l} style={{textAlign:"center"}}>
-                    <div style={{color:"#0f1e30",fontSize:7,letterSpacing:1,marginBottom:2}}>{l}</div>
+                    <div style={{color:"#6890a8",fontSize:7,letterSpacing:1,marginBottom:2}}>{l}</div>
                     <div style={{color:col,fontSize:13,fontWeight:700}}>{v}</div>
                   </div>
                 ))}
@@ -3399,12 +3399,12 @@ function FundamentalsView() {
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
                       {items.map(({l,v})=>(
                         <div key={l}>
-                          <div style={{color:"#0f1e30",fontSize:7}}>{l}</div>
+                          <div style={{color:"#6890a8",fontSize:7}}>{l}</div>
                           <div style={{color:"#a8b8c8",fontSize:12,fontWeight:700,marginTop:1}}>{v}</div>
                         </div>
                       ))}
                     </div>
-                    <div style={{color:"#080f18",fontSize:7,marginTop:8,letterSpacing:1}}>CLICK TO DEEP DIVE →</div>
+                    <div style={{color:"#6890a8",fontSize:7,marginTop:8,letterSpacing:1}}>CLICK TO DEEP DIVE →</div>
                   </div>
                 ))}
               </div>
@@ -3539,7 +3539,7 @@ function FundamentalsView() {
                         <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"8px 12px",fontFamily:"'Space Mono',monospace",fontSize:9}}>
                           <div style={{color:"#6890a8",marginBottom:4}}>{label}</div>
                           <div style={{color:"#c8dff0"}}>{symbol}: {payload[0]?.value?.toFixed(1)}x</div>
-                          <div style={{color:"#162535"}}>Industry: {payload[1]?.value?.toFixed(1)}x</div>
+                          <div style={{color:"#6890a8"}}>Industry: {payload[1]?.value?.toFixed(1)}x</div>
                         </div>
                       );
                     }}/>
@@ -3704,7 +3704,7 @@ function FundamentalsView() {
                         {/* safe line marker */}
                         <div style={{position:"absolute",left:`${(safe/max)*100}%`,top:0,bottom:0,width:1,background:"#e8f4f822"}}/>
                       </div>
-                      <div style={{color:"#080f18",fontSize:7,marginTop:2,fontFamily:"'Space Mono',monospace"}}>SAFE THRESHOLD: {safe}x</div>
+                      <div style={{color:"#6890a8",fontSize:7,marginTop:2,fontFamily:"'Space Mono',monospace"}}>SAFE THRESHOLD: {safe}x</div>
                     </div>
                   ))}
                 </div>
@@ -3880,7 +3880,7 @@ function IndustriesView() {
       {/* ── HEADER ROW ── */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{color:"#0f1e30",fontSize:8,letterSpacing:2}}>{filtered.length} INDUSTRIES</span>
+          <span style={{color:"#6890a8",fontSize:8,letterSpacing:2}}>{filtered.length} INDUSTRIES</span>
           <span style={{color:"#7dd3f0",fontSize:9}}>▲ {advancing}</span>
           <span style={{color:"#ff5f6d",fontSize:9}}>▼ {declining}</span>
           {unchanged>0&&<span style={{color:"#6890a8",fontSize:9}}>— {unchanged}</span>}
@@ -3906,7 +3906,7 @@ function IndustriesView() {
         {[[best,"BEST",true],[worst,"WORST",false]].map(([item,lbl,up])=>item&&(
           <div key={lbl} style={{background:"#0d1420",border:`1px solid ${up?"#7dd3f033":"#ff5f6d33"}`,borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{color:"#0f1e30",fontSize:7,letterSpacing:2,marginBottom:3}}>{lbl} {tf}</div>
+              <div style={{color:"#6890a8",fontSize:7,letterSpacing:2,marginBottom:3}}>{lbl} {tf}</div>
               <div style={{color:"#a8b8c8",fontSize:10}}>{item.label}</div>
               <div style={{color:"#6890a8",fontSize:8,marginTop:1}}>{item.sector}</div>
             </div>
@@ -3978,7 +3978,7 @@ function IndustriesView() {
               <div style={{color:"#e8f4f8",fontSize:13,fontWeight:700,letterSpacing:1}}>{sel.label}</div>
               <div style={{color:sel.sectorColor,fontSize:9,marginTop:3}}>{sel.sector}</div>
             </div>
-            <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:"#162535",fontSize:14,cursor:"pointer"}}>✕</button>
+            <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:"#6890a8",fontSize:14,cursor:"pointer"}}>✕</button>
           </div>
           {/* All TF changes */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
@@ -3986,7 +3986,7 @@ function IndustriesView() {
               const v=sel.changes[t], up=v>=0;
               return(
                 <div key={t} style={{background:"#0a0e14",borderRadius:8,padding:"10px 12px",border:`1px solid ${t===tf?"#7dd3f044":"#1a2535"}`}}>
-                  <div style={{color:"#0f1e30",fontSize:8,marginBottom:4}}>{t}</div>
+                  <div style={{color:"#6890a8",fontSize:8,marginBottom:4}}>{t}</div>
                   <div style={{color:up?"#7dd3f0":"#ff5f6d",fontSize:16,fontWeight:700}}>{up?"+":""}{v.toFixed(2)}%</div>
                 </div>
               );
@@ -4026,11 +4026,11 @@ function IndustriesView() {
 function LoadingScreen({progress,label}){
   return(
     <div style={{minHeight:"100vh",background:"#0a0e14",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:20}}>
-      <div style={{color:"#162535",fontFamily:"'Space Mono',monospace",fontSize:11,letterSpacing:3}}>{label}</div>
+      <div style={{color:"#6890a8",fontFamily:"'Space Mono',monospace",fontSize:11,letterSpacing:3}}>{label}</div>
       <div style={{width:240,height:2,background:"#1a2535",borderRadius:2,overflow:"hidden"}}>
         <div style={{height:"100%",width:`${progress}%`,background:"#7dd3f0",borderRadius:2,transition:"width 0.3s"}}/>
       </div>
-      <div style={{color:"#0f1e30",fontFamily:"'Space Mono',monospace",fontSize:9,letterSpacing:2}}>{progress}%</div>
+      <div style={{color:"#6890a8",fontFamily:"'Space Mono',monospace",fontSize:9,letterSpacing:2}}>{progress}%</div>
     </div>
   );
 }
@@ -5016,7 +5016,7 @@ function ChartTab() {
           <div style={{background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:10,padding:"10px 12px"}}>
             <div style={{color:C_TEXT_DIM,fontSize:8,letterSpacing:1,marginBottom:6}}>ACTIVE TOOL</div>
             <div style={{color:C_MAIN_COL,fontSize:10,fontFamily:C_FONT}}>{TOOLS.find(t=>t.id===tool)?.label}</div>
-            <div style={{color:"#080f18",fontSize:8,marginTop:8,lineHeight:1.7}}>
+            <div style={{color:"#6890a8",fontSize:8,marginTop:8,lineHeight:1.7}}>
               Scroll = zoom<br/>
               Middle-click = pan<br/>
               Click drawing = select<br/>
@@ -5106,12 +5106,12 @@ export default function MarketDashboard(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <div>
             <h1 style={{color:"#e8f4f8",fontSize:17,fontWeight:700,letterSpacing:3,margin:0}}>MARKET<span style={{color:C_MAIN_COL}}>PULSE</span></h1>
-            <div style={{color:"#0f1e30",fontSize:8,letterSpacing:2,marginTop:3}}>
+            <div style={{color:"#6890a8",fontSize:8,letterSpacing:2,marginTop:3}}>
               {lastUpdate?`UPDATED ${lastUpdate.toLocaleTimeString()}`:"LOADING"} · {liveCount}/16 LIVE
             </div>
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
-            <button onClick={load} style={{background:"none",border:"1px solid #1a2535",color:"#162535",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:9}}>↺</button>
+            <button onClick={load} style={{background:"none",border:"1px solid #1a2535",color:"#6890a8",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:9}}>↺</button>
             {NAV_TABS.map(t=>(
               <button key={t.key} onClick={()=>setView(t.key)} style={{background:view===t.key?"#152030":"none",border:`1px solid ${view===t.key?C_MAIN_COL:"#1a2535"}`,color:view===t.key?C_MAIN_COL:"#162535",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>
                 {t.icon} {t.key==="watchlist"?`${t.label}${watchlist.size?` (${watchlist.size})`:""}`:t.label.toUpperCase()}
@@ -5148,7 +5148,7 @@ export default function MarketDashboard(){
         {view==="heatmap"&&(
           <>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div style={{color:"#0f1e30",fontSize:8,letterSpacing:2}}>SECTOR HEATMAP · HOVER FOR ALL TIMEFRAMES</div>
+              <div style={{color:"#6890a8",fontSize:8,letterSpacing:2}}>SECTOR HEATMAP · HOVER FOR ALL TIMEFRAMES</div>
               <TfBarInline value={heatTf} onChange={setHeatTf} options={HEATMAP_TFS}/>
             </div>
             <HeatmapView heatData={heatData} ndxData={ndxData} tf={heatTf}/>
@@ -5170,7 +5170,7 @@ export default function MarketDashboard(){
           <>
             <div style={{marginBottom:18}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <span style={{color:"#0f1e30",fontSize:8,letterSpacing:2}}>TOP MOVERS</span>
+                <span style={{color:"#6890a8",fontSize:8,letterSpacing:2}}>TOP MOVERS</span>
                 <TfBarInline value={tf} onChange={setTf} options={CHART_TIMEFRAMES.map(t=>t.key)}/>
               </div>
               <TopMovers allData={allData} tf={tf} onSelect={handleSelect}/>
