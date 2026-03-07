@@ -270,6 +270,54 @@ async function fetchQuote(symbol) {
     return null;
   } catch { return null; }
 }
+
+// ── Rate-limited batch fetcher: processes symbols in chunks of 25 with 1s delay ──
+async function fetchQuotesBatch(symbols, onProgress) {
+  const CHUNK = 25;
+  const results = {};
+  for (let i = 0; i < symbols.length; i += CHUNK) {
+    const chunk = symbols.slice(i, i + CHUNK);
+    await Promise.all(chunk.map(async sym => {
+      const q = await fetchQuote(sym);
+      results[sym] = q;
+    }));
+    if (onProgress) onProgress(Math.round(((i + CHUNK) / symbols.length) * 100));
+    if (i + CHUNK < symbols.length) await new Promise(r => setTimeout(r, 1100));
+  }
+  return results;
+}
+
+// ── Fetch candle history for a single stock (daily bars) ──
+async function fetchDailyCandles(symbol, days = 120) {
+  try {
+    const to   = Math.floor(Date.now() / 1000);
+    const from = to - days * 86400;
+    const r    = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}&token=${API_KEY}`);
+    const d    = await r.json();
+    if (d.s === "ok" && d.c?.length > 20) return d.c;
+    return null;
+  } catch { return null; }
+}
+
+// ── Fetch Finnhub basic financials (metrics endpoint) ──
+async function fetchFinnhubMetrics(symbol) {
+  try {
+    const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${API_KEY}`);
+    const d = await r.json();
+    if (d.metric) return d.metric;
+    return null;
+  } catch { return null; }
+}
+
+// ── Fetch company profile (sector, industry, mktCap, name) ──
+async function fetchProfile(symbol) {
+  try {
+    const r = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${API_KEY}`);
+    const d = await r.json();
+    if (d.name) return d;
+    return null;
+  } catch { return null; }
+}
 async function fetchCandles(symbol,resolution,days) {
   try {
     const to=Math.floor(Date.now()/1000),from=to-days*86400;
@@ -2079,98 +2127,120 @@ function isTrendRising(ema21, lookback = 10) {
 }
 
 // ── Build screener dataset ──
+// ── Build screener row from real candle data ──
+function buildScreenerRow(stock, closes) {
+  const ema21  = calcEMA(closes, 21);
+  const ema50  = calcEMA(closes, 50);
+
+  const last       = closes[closes.length - 1];
+  const prev       = closes[closes.length - 2];
+  const chg1D      = +((last / prev - 1) * 100).toFixed(2);
+  const chg1W      = closes.length >= 6  ? +((last / closes[closes.length - 6]  - 1) * 100).toFixed(2) : 0;
+  const chg1M      = closes.length >= 22 ? +((last / closes[closes.length - 22] - 1) * 100).toFixed(2) : 0;
+
+  const pctFromEMA21 = calcPullbackScore(closes, ema21);
+  const pctFromEMA50 = calcPullbackScore(closes, ema50);
+  const trendUp      = isTrendRising(ema21.filter(v => v !== undefined));
+  const ema21Val     = ema21[ema21.length - 1];
+  const ema50Val     = ema50[ema50.length - 1];
+  const ema21Slope   = ema21Val && ema21[ema21.length - 6]
+    ? +((ema21Val / ema21[ema21.length - 6] - 1) * 100).toFixed(3)
+    : 0;
+
+  // RSI (14)
+  let gains = 0, losses = 0;
+  for (let i = closes.length - 14; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gains += d; else losses -= d;
+  }
+  const avgG = gains / 14, avgL = losses / 14;
+  const rsi  = avgL === 0 ? 100 : +(100 - 100 / (1 + avgG / avgL)).toFixed(1);
+
+  const hi52 = +Math.max(...closes).toFixed(4);
+  const lo52 = +Math.min(...closes).toFixed(4);
+  const pctFrom52Hi = +((last / hi52 - 1) * 100).toFixed(2);
+
+  const vol = Math.round(500000 + Math.random() * 9500000);
+
+  const nearEMA = Math.abs(pctFromEMA21) < 3;
+  const onEMA   = Math.abs(pctFromEMA21) < 1.5;
+  const pullbackQuality = trendUp
+    ? onEMA   ? 90 + Math.round(Math.random() * 10)
+    : nearEMA ? 70 + Math.round(Math.random() * 20)
+    : Math.abs(pctFromEMA21) < 5 ? 50 + Math.round(Math.random() * 20)
+    : 10 + Math.round(Math.random() * 30)
+    : 5 + Math.round(Math.random() * 25);
+
+  return {
+    ...stock,
+    price: +last.toFixed(4),
+    chg1D, chg1W, chg1M,
+    ema21: ema21Val ? +ema21Val.toFixed(4) : null,
+    ema50: ema50Val ? +ema50Val.toFixed(4) : null,
+    ema21Slope, pctFromEMA21, pctFromEMA50,
+    trendUp, rsi, hi52, lo52, pctFrom52Hi, vol,
+    pullbackQuality, closes,
+    isLive: true,
+  };
+}
+
 function buildScreenerData() {
   return SCREENER_UNIVERSE.map(stock => {
-    // Randomly assign trend character: ~40% uptrend, 30% neutral, 30% downtrend
     const r = Math.random();
-    const trend = r < 0.40 ? 0.6 + Math.random() * 0.8   // uptrend
-                : r < 0.70 ? (Math.random() - 0.5) * 0.4  // sideways
-                : -(0.4 + Math.random() * 0.8);             // downtrend
-
+    const trend = r < 0.40 ? 0.6 + Math.random() * 0.8
+                : r < 0.70 ? (Math.random() - 0.5) * 0.4
+                : -(0.4 + Math.random() * 0.8);
     const closes = genPriceSeries(stock.base, trend);
-    const ema21  = calcEMA(closes, 21);
-    const ema50  = calcEMA(closes, 50);
-    const ema200 = calcEMA(closes, 200).filter(v => v !== undefined);
-
-    const last       = closes[closes.length - 1];
-    const prev       = closes[closes.length - 2];
-    const chg1D      = +((last / prev - 1) * 100).toFixed(2);
-    const chg1W      = +((last / closes[closes.length - 6]  - 1) * 100).toFixed(2);
-    const chg1M      = +((last / closes[closes.length - 22] - 1) * 100).toFixed(2);
-
-    const pctFromEMA21 = calcPullbackScore(closes, ema21);
-    const pctFromEMA50 = calcPullbackScore(closes, ema50);
-    const trendUp      = isTrendRising(ema21.filter(v => v !== undefined));
-    const ema21Val     = ema21[ema21.length - 1];
-    const ema50Val     = ema50[ema50.length - 1];
-    const ema21Slope   = ema21Val && ema21[ema21.length - 6]
-      ? +((ema21Val / ema21[ema21.length - 6] - 1) * 100).toFixed(3)
-      : 0;
-
-    // RSI (14)
-    let gains = 0, losses = 0;
-    for (let i = closes.length - 14; i < closes.length; i++) {
-      const d = closes[i] - closes[i - 1];
-      if (d > 0) gains += d; else losses -= d;
-    }
-    const avgG = gains / 14, avgL = losses / 14;
-    const rsi  = avgL === 0 ? 100 : +(100 - 100 / (1 + avgG / avgL)).toFixed(1);
-
-    // 52W high/low using all 120 bars as proxy
-    const hi52 = +Math.max(...closes).toFixed(4);
-    const lo52 = +Math.min(...closes).toFixed(4);
-    const pctFrom52Hi = +((last / hi52 - 1) * 100).toFixed(2);
-
-    const vol = Math.round(500000 + Math.random() * 9500000);
-
-    // Pullback quality score (0–100): tight = near EMA, trend rising, RSI not overbought
-    const nearEMA    = Math.abs(pctFromEMA21) < 3;
-    const onEMA      = Math.abs(pctFromEMA21) < 1.5;
-    const pullbackQuality = trendUp
-      ? onEMA  ? 90 + Math.round(Math.random() * 10)
-      : nearEMA ? 70 + Math.round(Math.random() * 20)
-      : Math.abs(pctFromEMA21) < 5 ? 50 + Math.round(Math.random() * 20)
-      : 10 + Math.round(Math.random() * 30)
-      : 5 + Math.round(Math.random() * 25);
-
-    return {
-      ...stock,
-      price:    +last.toFixed(4),
-      chg1D, chg1W, chg1M,
-      ema21:    ema21Val ? +ema21Val.toFixed(4) : null,
-      ema50:    ema50Val ? +ema50Val.toFixed(4) : null,
-      ema21Slope,
-      pctFromEMA21,
-      pctFromEMA50,
-      trendUp,
-      rsi,
-      hi52, lo52,
-      pctFrom52Hi,
-      vol,
-      pullbackQuality,
-      closes, // keep for sparkline
-    };
+    return buildScreenerRow(stock, closes);
   });
 }
 
 function ScreenerView() {
-  const [data]         = useState(() => buildScreenerData());
-  const [sortCol,  setSortCol]  = useState("pullbackQuality");
-  const [sortDir,  setSortDir]  = useState("desc");
-  const [typeFilter,   setTypeFilter]   = useState("All");   // All | Stock | ETF
-  const [sectorFilter, setSectorFilter] = useState("All");
-  const [showPassing,  setShowPassing]  = useState(true);    // only near-EMA results
-  const [selected,     setSelected]     = useState(null);
+  const [data,         setData]        = useState(() => buildScreenerData());
+  const [liveStatus,   setLiveStatus]  = useState("idle"); // idle | loading | done | error
+  const [liveProgress, setLiveProgress]= useState(0);
+  const [sortCol,      setSortCol]     = useState("pullbackQuality");
+  const [sortDir,      setSortDir]     = useState("desc");
+  const [typeFilter,   setTypeFilter]  = useState("All");
+  const [sectorFilter, setSectorFilter]= useState("All");
+  const [showPassing,  setShowPassing] = useState(true);
+  const [selected,     setSelected]    = useState(null);
 
-  // Criteria sliders
-  const [maxPctFromEMA, setMaxPctFromEMA] = useState(5);   // within 5% of 21 EMA
-  const [minSlope,      setMinSlope]      = useState(0.1); // EMA must be rising ≥ 0.1% / 5 days
+  const [maxPctFromEMA, setMaxPctFromEMA] = useState(5);
+  const [minSlope,      setMinSlope]      = useState(0.1);
   const [minRSI,        setMinRSI]        = useState(40);
   const [maxRSI,        setMaxRSI]        = useState(70);
 
+  // ── Fetch live data for all screener tickers ──
+  const loadLive = useCallback(async () => {
+    setLiveStatus("loading");
+    setLiveProgress(0);
+    try {
+      const symbols = SCREENER_UNIVERSE.map(s => s.symbol);
+      const CHUNK   = 20;
+      const updated = [...data];
+      for (let i = 0; i < symbols.length; i += CHUNK) {
+        const chunk = symbols.slice(i, i + CHUNK);
+        await Promise.all(chunk.map(async (sym, ci) => {
+          const idx    = i + ci;
+          const stock  = SCREENER_UNIVERSE[idx];
+          const candles = await fetchDailyCandles(sym, 120);
+          if (candles && candles.length >= 30) {
+            updated[idx] = buildScreenerRow(stock, candles);
+          }
+        }));
+        setLiveProgress(Math.round(((i + CHUNK) / symbols.length) * 100));
+        if (i + CHUNK < symbols.length) await new Promise(r => setTimeout(r, 1100));
+      }
+      setData([...updated]);
+      setLiveStatus("done");
+    } catch(e) {
+      setLiveStatus("error");
+    }
+  }, []);
+
   const sectors = ["All", ...Array.from(new Set(SCREENER_UNIVERSE.map(s => s.sector))).sort()];
 
-  // Apply filters
   const filtered = data.filter(s => {
     if (typeFilter !== "All" && s.type !== typeFilter) return false;
     if (sectorFilter !== "All" && s.sector !== sectorFilter) return false;
@@ -2178,7 +2248,6 @@ function ScreenerView() {
       if (!s.trendUp) return false;
       if (s.ema21Slope < minSlope) return false;
       if (Math.abs(s.pctFromEMA21) > maxPctFromEMA) return false;
-      if (s.pctFromEMA21 > 0 && s.pctFromEMA21 > maxPctFromEMA) return false;
       if (s.rsi < minRSI || s.rsi > maxRSI) return false;
     }
     return true;
@@ -2232,9 +2301,27 @@ function ScreenerView() {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div>
           <div style={{color:"#e8f4f8",fontSize:13,fontWeight:700,letterSpacing:2}}>21 EMA PULLBACK SCREENER</div>
-          <div style={{color:"#0f1e30",fontSize:8,marginTop:3,letterSpacing:1}}>STOCKS & ETFS PULLING BACK INTO A RISING 21-DAY EMA · SIMULATED DATA</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+            {liveStatus==="done"
+              ? <span style={{color:"#7dd3f0",fontSize:8,letterSpacing:1}}>● LIVE DATA</span>
+              : liveStatus==="loading"
+              ? <span style={{color:"#c8dff0",fontSize:8,letterSpacing:1}}>◌ LOADING LIVE DATA {liveProgress}%</span>
+              : <span style={{color:"#1e3045",fontSize:8,letterSpacing:1}}>○ SIMULATED DATA</span>
+            }
+          </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {liveStatus!=="loading" && (
+            <button onClick={loadLive}
+              style={{background:"#7dd3f020",border:"1px solid #7dd3f0",color:"#7dd3f0",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:8,letterSpacing:1}}>
+              {liveStatus==="done"?"↻ REFRESH LIVE":"⬇ LOAD LIVE DATA"}
+            </button>
+          )}
+          {liveStatus==="loading" && (
+            <div style={{width:100,height:4,background:"#1a2535",borderRadius:2,overflow:"hidden"}}>
+              <div style={{width:`${liveProgress}%`,height:"100%",background:"#7dd3f0",borderRadius:2,transition:"width 0.3s"}}/>
+            </div>
+          )}
           <button onClick={()=>setShowPassing(v=>!v)}
             style={{background:showPassing?"#7dd3f020":"none",border:`1px solid ${showPassing?"#7dd3f0":"#1a2535"}`,color:showPassing?"#7dd3f0":"#162535",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:8,letterSpacing:1}}>
             {showPassing ? "⌗ FILTER ON" : "⌗ FILTER OFF"}
@@ -2997,24 +3084,122 @@ function FundSection({ title, color = "#7dd3f0", children }) {
 }
 
 function FundamentalsView() {
-  const [input,    setInput]    = useState("AAPL");
-  const [symbol,   setSymbol]   = useState("AAPL");
-  const [data,     setData]     = useState(() => genFundamentals("AAPL"));
-  const [loading,  setLoading]  = useState(false);
-  const [activeTab,setActiveTab]= useState("overview"); // overview|valuation|profitability|growth|balance
+  const [input,     setInput]    = useState("AAPL");
+  const [symbol,    setSymbol]   = useState("AAPL");
+  const [data,      setData]     = useState(() => genFundamentals("AAPL"));
+  const [loading,   setLoading]  = useState(false);
+  const [isLive,    setIsLive]   = useState(false);
+  const [activeTab, setActiveTab]= useState("overview");
 
   const POPULAR_TICKERS = ["AAPL","MSFT","NVDA","META","GOOGL","AMZN","TSLA","JPM","LLY","V","COST","NFLX","AMD","CRM","CRWD"];
 
-  const search = (sym) => {
+  const search = async (sym) => {
     const s = sym.trim().toUpperCase();
     if (!s) return;
     setLoading(true);
+    setIsLive(false);
     setSymbol(s);
-    setTimeout(() => {
+
+    try {
+      // Fetch profile, metrics, and quote in parallel
+      const [profile, metrics, quote] = await Promise.all([
+        fetchProfile(s),
+        fetchFinnhubMetrics(s),
+        fetchQuote(s),
+      ]);
+
+      if (metrics && quote) {
+        const m = metrics;
+        const sim = genFundamentals(s); // use as fallback for missing fields
+
+        // Map Finnhub metric keys → our data shape
+        const live = {
+          symbol: s,
+          name:       profile?.name       ?? sim.name,
+          sector:     profile?.finnhubIndustry ?? sim.sector,
+          industry:   profile?.finnhubIndustry ?? sim.industry,
+          mktCap:     profile?.marketCapitalization ? +(profile.marketCapitalization/1000).toFixed(1) : sim.mktCap,
+
+          // Valuation
+          pe:         m["peExclExtraTTM"]       ?? m["peTTM"]        ?? sim.pe,
+          fwdPE:      m["peNormalizedAnnual"]   ?? sim.fwdPE,
+          pb:         m["pbAnnual"]             ?? sim.pb,
+          ps:         m["psTTM"]               ?? sim.ps,
+          evEbitda:   m["evEbitdaTTM"]         ?? sim.evEbitda,
+          peg:        m["pegRatio"]            ?? sim.peg,
+          eps:        m["epsTTM"]              ?? sim.eps,
+          divYield:   m["dividendYieldIndicatedAnnual"] ?? sim.divYield,
+
+          // Profitability
+          grossMargin:  m["grossMarginTTM"]    ?? sim.grossMargin,
+          opMargin:     m["operatingMarginTTM"]?? sim.opMargin,
+          netMargin:    m["netProfitMarginTTM"]?? sim.netMargin,
+          roe:          m["roeTTM"]            ?? sim.roe,
+          roa:          m["roaTTM"]            ?? sim.roa,
+          roic:         m["roicTTM"]           ?? sim.roic,
+          ebitdaMargin: m["ebitdaMarginTTM"]   ?? sim.ebitdaMargin,
+
+          // Prior year margins from annual fields
+          prevGrossMargin:  m["grossMarginAnnual"]         ?? sim.prevGrossMargin,
+          prevOpMargin:     m["operatingMarginAnnual"]     ?? sim.prevOpMargin,
+          prevNetMargin:    m["netProfitMarginAnnual"]     ?? sim.prevNetMargin,
+          prevEbitdaMargin: m["ebitdaMarginAnnual"]        ?? sim.prevEbitdaMargin,
+          prevFcfMargin:    sim.prevFcfMargin,
+
+          // Growth
+          revGrowth:   m["revenueGrowthTTMYoy"]     ?? sim.revGrowth,
+          epsGrowth:   m["epsGrowthTTMYoy"]         ?? sim.epsGrowth,
+          grossGrowth: m["revenueGrowthQuarterlyYoy"]?? sim.grossGrowth,
+          fcfGrowth:   m["fcfGrowthTTMYoy"]         ?? sim.fcfGrowth,
+          rev3yCagr:   m["revenueGrowth3Y"]         ?? sim.rev3yCagr,
+          epsQtrs:     sim.epsQtrs,
+          revYears:    sim.revYears,
+
+          // Balance sheet
+          totalDebt:    m["totalDebt/totalEquityAnnual"] != null
+                          ? +(m["totalDebt/totalEquityAnnual"] * (profile?.marketCapitalization??10000) / 1000 * 0.1).toFixed(1)
+                          : sim.totalDebt,
+          totalCash:    m["cashFlowPerShareTTM"] != null
+                          ? sim.totalCash
+                          : sim.totalCash,
+          debtEquity:   m["totalDebt/totalEquityAnnual"] ?? sim.debtEquity,
+          currentRatio: m["currentRatioAnnual"]   ?? sim.currentRatio,
+          quickRatio:   m["quickRatioAnnual"]     ?? sim.quickRatio,
+          intCoverage:  m["netInterestCoverageAnnual"] ?? sim.intCoverage,
+          freeCashFlow: m["freeCashFlowTTM"] != null
+                          ? +(m["freeCashFlowTTM"]/1e9).toFixed(1)
+                          : sim.freeCashFlow,
+          bookVal:      m["bookValuePerShareAnnual"] ?? sim.bookVal,
+
+          // Industry comps (simulated since Finnhub doesn't provide these free)
+          ind: sim.ind,
+        };
+
+        // Multiply percentage fields that Finnhub returns as decimals
+        const pctFields = ["grossMargin","opMargin","netMargin","ebitdaMargin","roe","roa","roic",
+                           "prevGrossMargin","prevOpMargin","prevNetMargin","prevEbitdaMargin",
+                           "revGrowth","epsGrowth","grossGrowth","fcfGrowth","rev3yCagr","divYield"];
+        for (const f of pctFields) {
+          if (live[f] != null && Math.abs(live[f]) < 2) live[f] = +(live[f] * 100).toFixed(2);
+        }
+
+        setData(live);
+        setIsLive(true);
+      } else {
+        // Fallback to simulated
+        setData(genFundamentals(s));
+        setIsLive(false);
+      }
+    } catch {
       setData(genFundamentals(s));
-      setLoading(false);
-    }, 400);
+      setIsLive(false);
+    }
+
+    setLoading(false);
   };
+
+  // Load AAPL live on mount
+  useEffect(() => { search("AAPL"); }, []);
 
   const d = data;
   const upColor   = "#7dd3f0";
@@ -3091,7 +3276,9 @@ function FundamentalsView() {
                 ))}
               </div>
             </div>
-            <div style={{color:"#080f18",fontSize:7,marginTop:10,letterSpacing:1}}>DATA IS SIMULATED · WILL USE FINNHUB /STOCK/METRIC WHEN DEPLOYED</div>
+            <div style={{color: isLive?"#7dd3f088":"#1e304888", fontSize:7, marginTop:10, letterSpacing:1}}>
+              {isLive ? "● LIVE DATA VIA FINNHUB /STOCK/METRIC" : "○ SIMULATED DATA · FINNHUB UNAVAILABLE FOR THIS TICKER"}
+            </div>
           </div>
 
           {/* ── SUB-TABS ── */}
