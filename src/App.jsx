@@ -5,8 +5,6 @@ import {
   ReferenceLine, ComposedChart
 } from "recharts";
 
-const API_KEY = "d6lqm0pr01quej914cm0d6lqm0pr01quej914cmg";
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,84 +258,161 @@ function genVix(points) {
 const BREADTH_POINT_MAP = {"1D":78,"1W":5,"1M":22,"3M":66,"6M":130};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API
+// API — Yahoo Finance (15-min delayed, no key required)
 // ─────────────────────────────────────────────────────────────────────────────
+
+const YF_PROXY = "https://query1.finance.yahoo.com";
+const YF_PROXY2 = "https://query2.finance.yahoo.com";
+
+// Map our internal symbols to Yahoo Finance symbols
+function toYahooSymbol(symbol) {
+  const MAP = {
+    "OANDA:EUR_USD": "EURUSD=X",
+    "OANDA:GBP_USD": "GBPUSD=X",
+    "OANDA:USD_JPY": "USDJPY=X",
+    "OANDA:USD_CHF": "USDCHF=X",
+    "BINANCE:BTCUSDT": "BTC-USD",
+    "BINANCE:ETHUSDT": "ETH-USD",
+    "BINANCE:SOLUSDT": "SOL-USD",
+    "BINANCE:BNBUSDT": "BNB-USD",
+  };
+  return MAP[symbol] || symbol;
+}
+
+// Fetch a single quote from Yahoo Finance
 async function fetchQuote(symbol) {
+  const ySym = toYahooSymbol(symbol);
   try {
-    const r=await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${API_KEY}`);
-    const d=await r.json();
-    if(d.c&&d.c>0) return {price:d.c,open:d.o,high:d.h,low:d.l,prevClose:d.pc,dp:d.dp};
-    return null;
+    const r = await fetch(
+      `${YF_PROXY}/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=5d`,
+      { headers: { "Accept": "application/json" } }
+    );
+    const d = await r.json();
+    const meta = d?.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) return null;
+    const price     = meta.regularMarketPrice;
+    const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? price;
+    const dp        = +((price - prevClose) / prevClose * 100).toFixed(2);
+    return { price, open: meta.regularMarketOpen ?? price, high: meta.regularMarketDayHigh ?? price,
+             low: meta.regularMarketDayLow ?? price, prevClose, dp };
   } catch { return null; }
 }
 
-// ── Rate-limited batch fetcher: processes symbols in chunks of 25 with 1s delay ──
+// Fetch OHLC candle history from Yahoo Finance
+// interval: 1m,5m,15m,30m,60m,1d,1wk,1mo  range: 1d,5d,1mo,3mo,6mo,1y,2y,5y
+async function fetchYahooCandles(symbol, interval, range) {
+  const ySym = toYahooSymbol(symbol);
+  try {
+    const r = await fetch(
+      `${YF_PROXY}/v8/finance/chart/${encodeURIComponent(ySym)}?interval=${interval}&range=${range}`,
+      { headers: { "Accept": "application/json" } }
+    );
+    const d = await r.json();
+    const result = d?.chart?.result?.[0];
+    if (!result?.timestamp || !result?.indicators?.quote?.[0]?.close) return null;
+    const closes = result.indicators.quote[0].close;
+    const times  = result.timestamp;
+    const out = [];
+    for (let i = 0; i < closes.length; i++) {
+      if (closes[i] != null) out.push({ t: times[i], value: parseFloat(closes[i].toFixed(6)) });
+    }
+    return out.length > 2 ? out : null;
+  } catch { return null; }
+}
+
+// Map our TIMEFRAME keys to Yahoo Finance interval/range params
+function tfToYahoo(tfKey) {
+  return {
+    "1D": { interval: "5m",  range: "1d"  },
+    "1W": { interval: "1h",  range: "5d"  },
+    "1M": { interval: "1d",  range: "1mo" },
+    "1Y": { interval: "1wk", range: "1y"  },
+  }[tfKey] || { interval: "1d", range: "1mo" };
+}
+
+// Fetch daily candles for screener (120 trading days ≈ 6mo)
+async function fetchDailyCandles(symbol, days = 120) {
+  const range = days <= 30 ? "1mo" : days <= 90 ? "3mo" : days <= 180 ? "6mo" : "1y";
+  const result = await fetchYahooCandles(symbol, "1d", range);
+  if (!result) return null;
+  return result.map(r => r.value);
+}
+
+// Fetch Yahoo Finance fundamentals (summary detail + statistics)
+async function fetchFinnhubMetrics(symbol) {
+  try {
+    const r = await fetch(
+      `${YF_PROXY}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,financialData,summaryDetail`,
+      { headers: { "Accept": "application/json" } }
+    );
+    const d = await r.json();
+    const s = d?.quoteSummary?.result?.[0];
+    if (!s) return null;
+    const ks = s.defaultKeyStatistics || {};
+    const fd = s.financialData || {};
+    const sd = s.summaryDetail || {};
+    // Normalize to our expected metric shape
+    return {
+      peExclExtraTTM:               ks.trailingPE?.raw,
+      peNormalizedAnnual:           ks.forwardPE?.raw,
+      pbAnnual:                     ks.priceToBook?.raw,
+      psTTM:                        ks.priceToSalesTrailing12Months?.raw,
+      evEbitdaTTM:                  ks.enterpriseToEbitda?.raw,
+      pegRatio:                     ks.pegRatio?.raw,
+      epsTTM:                       ks.trailingEps?.raw,
+      dividendYieldIndicatedAnnual: sd.dividendYield?.raw,
+      grossMarginTTM:               fd.grossMargins?.raw,
+      operatingMarginTTM:           fd.operatingMargins?.raw,
+      netProfitMarginTTM:           fd.profitMargins?.raw,
+      ebitdaMarginTTM:              null,
+      roeTTM:                       fd.returnOnEquity?.raw,
+      roaTTM:                       fd.returnOnAssets?.raw,
+      roicTTM:                      null,
+      revenueGrowthTTMYoy:          fd.revenueGrowth?.raw,
+      epsGrowthTTMYoy:              fd.earningsGrowth?.raw,
+      currentRatioAnnual:           fd.currentRatio?.raw,
+      quickRatioAnnual:             fd.quickRatio?.raw,
+      debtToEquity:                 fd.debtToEquity?.raw,
+      freeCashFlowTTM:              fd.freeCashflow?.raw,
+      totalCashAnnual:              fd.totalCash?.raw,
+      totalDebtAnnual:              fd.totalDebt?.raw,
+    };
+  } catch { return null; }
+}
+
+// Fetch company profile from Yahoo Finance
+async function fetchProfile(symbol) {
+  try {
+    const r = await fetch(
+      `${YF_PROXY}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=assetProfile,price`,
+      { headers: { "Accept": "application/json" } }
+    );
+    const d = await r.json();
+    const s = d?.quoteSummary?.result?.[0];
+    if (!s) return null;
+    const ap = s.assetProfile || {};
+    const pr = s.price || {};
+    return {
+      name:                    pr.shortName ?? pr.longName,
+      finnhubIndustry:         ap.industry,
+      sector:                  ap.sector,
+      marketCapitalization:    pr.marketCap?.raw ? pr.marketCap.raw / 1e6 : null,
+    };
+  } catch { return null; }
+}
+
+// Batch fetch quotes — Yahoo has no rate limits so we can fire all at once
 async function fetchQuotesBatch(symbols, onProgress) {
-  const CHUNK = 25;
   const results = {};
+  const CHUNK = 20;
   for (let i = 0; i < symbols.length; i += CHUNK) {
     const chunk = symbols.slice(i, i + CHUNK);
     await Promise.all(chunk.map(async sym => {
-      const q = await fetchQuote(sym);
-      results[sym] = q;
+      results[sym] = await fetchQuote(sym);
     }));
     if (onProgress) onProgress(Math.round(((i + CHUNK) / symbols.length) * 100));
-    if (i + CHUNK < symbols.length) await new Promise(r => setTimeout(r, 1100));
   }
   return results;
-}
-
-// ── Fetch candle history for a single stock (daily bars) ──
-async function fetchDailyCandles(symbol, days = 120) {
-  try {
-    const to   = Math.floor(Date.now() / 1000);
-    const from = to - days * 86400;
-    const r    = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}&token=${API_KEY}`);
-    const d    = await r.json();
-    if (d.s === "ok" && d.c?.length > 20) return d.c;
-    return null;
-  } catch { return null; }
-}
-
-// ── Fetch Finnhub basic financials (metrics endpoint) ──
-async function fetchFinnhubMetrics(symbol) {
-  try {
-    const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${API_KEY}`);
-    const d = await r.json();
-    if (d.metric) return d.metric;
-    return null;
-  } catch { return null; }
-}
-
-// ── Fetch company profile (sector, industry, mktCap, name) ──
-async function fetchProfile(symbol) {
-  try {
-    const r = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${API_KEY}`);
-    const d = await r.json();
-    if (d.name) return d;
-    return null;
-  } catch { return null; }
-}
-async function fetchCandles(symbol,resolution,days) {
-  try {
-    const to=Math.floor(Date.now()/1000),from=to-days*86400;
-    const r=await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${API_KEY}`);
-    const d=await r.json();
-    if(d.s==="ok"&&d.c?.length>1) return d.c.map((v,i)=>({t:i,value:parseFloat(v.toFixed(6))}));
-    const r2=await fetch(`https://finnhub.io/api/v1/forex/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${API_KEY}`);
-    const d2=await r2.json();
-    if(d2.s==="ok"&&d2.c?.length>1) return d2.c.map((v,i)=>({t:i,value:parseFloat(v.toFixed(6))}));
-    return null;
-  } catch { return null; }
-}
-async function fetchCryptoCandles(symbol,resolution,days) {
-  try {
-    const to=Math.floor(Date.now()/1000),from=to-days*86400;
-    const r=await fetch(`https://finnhub.io/api/v1/crypto/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${API_KEY}`);
-    const d=await r.json();
-    if(d.s==="ok"&&d.c?.length>1) return d.c.map((v,i)=>({t:i,value:parseFloat(v.toFixed(6))}));
-    return null;
-  } catch { return null; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -354,15 +429,19 @@ async function loadMarketData(onProgress) {
         const quote=await fetchQuote(asset.symbol);
         if(quote) livePrice=quote.price;
         for(const tf of TIMEFRAMES) {
-          let candles=cat==="crypto"
-            ?await fetchCryptoCandles(asset.symbol,tf.resolution,tf.days)
-            :await fetchCandles(asset.symbol,tf.resolution,tf.days);
-          if(candles?.length>2){if(livePrice)candles[candles.length-1].value=livePrice;histories[tf.key]=candles;}
-          else{const vol=asset.base>1000?0.008:asset.base>10?0.015:0.004;histories[tf.key]=generateHistory(livePrice||asset.base,vol,tf.days);}
+          const {interval,range}=tfToYahoo(tf.key);
+          const candles=await fetchYahooCandles(asset.symbol,interval,range);
+          if(candles?.length>2){
+            if(livePrice) candles[candles.length-1].value=livePrice;
+            histories[tf.key]=candles;
+          } else {
+            const vol=asset.base>1000?0.008:asset.base>10?0.015:0.004;
+            histories[tf.key]=generateHistory(livePrice||asset.base,vol,tf.days);
+          }
         }
       } else {
         const vol=asset.base>1000?0.006:asset.base>10?0.015:0.03;
-        for(const tf of TIMEFRAMES)histories[tf.key]=generateHistory(asset.base,vol,tf.days);
+        for(const tf of TIMEFRAMES) histories[tf.key]=generateHistory(asset.base,vol,tf.days);
       }
       done++;onProgress(Math.round(done/total*100));
       return{...asset,livePrice,histories,isLive:!!livePrice};
@@ -377,8 +456,18 @@ async function loadSectorData(sectors, onProgress) {
     const stocks=await Promise.all(sector.stocks.map(async stock=>{
       const quote=await fetchQuote(stock.symbol);
       done++;onProgress(Math.round(done/total*100));
-      const simChanges={"1D":quote?.dp??simPct(stock.base,0.012),"1W":simPct(stock.base,0.018),"1M":simPct(stock.base,0.032),"1Y":simPct(stock.base,0.08)};
-      return{...stock,price:quote?.price??stock.base,changes:simChanges,isLive:!!quote};
+      // Fetch 1Y daily candles to compute real multi-TF changes
+      const candles=await fetchYahooCandles(stock.symbol,"1d","1y");
+      const closes=candles?.map(c=>c.value)||[];
+      const last=quote?.price??stock.base;
+      function chgFrom(n){ return closes.length>=n ? +((last/closes[closes.length-n]-1)*100).toFixed(2) : simPct(stock.base,0.018); }
+      const simChanges={
+        "1D": quote?.dp ?? simPct(stock.base,0.012),
+        "1W": chgFrom(5),
+        "1M": chgFrom(21),
+        "1Y": chgFrom(252),
+      };
+      return{...stock,price:last,changes:simChanges,isLive:!!quote};
     }));
     const changes={};
     for(const tfKey of HEATMAP_TFS){
@@ -1161,27 +1250,28 @@ function WatchlistPanel({allData,watchlist,tf,onSelect,onRemove}){
 const IMPACT_COL = {high:"#ff5f6d", medium:"#c8dff0", low:"#7dd3f0"};
 const TAG_COL    = {MACRO:"#b8e8ff",MARKETS:"#7dd3f0",TECH:"#c8dff0",BANKS:"#c8dff0",CRYPTO:"#c8dff0",ENERGY:"#c8dff0",HEALTH:"#34d399",FOREX:"#b8e8ff"};
 
-// Fetch real company news from Finnhub for a given ticker symbol
+// Fetch real company news from Yahoo Finance for a given ticker symbol
 async function fetchTickerNews(symbol) {
   try {
-    const to   = new Date().toISOString().split("T")[0];
-    // widen to 30 days to maximize chance of results on free tier
-    const from = new Date(Date.now() - 30*24*60*60*1000).toISOString().split("T")[0];
-    const url  = `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(symbol.toUpperCase())}&from=${from}&to=${to}&token=${API_KEY}`;
-    const r = await fetch(url, { headers: { "X-Finnhub-Token": API_KEY } });
+    const sym = symbol.toUpperCase();
+    const r = await fetch(
+      `${YF_PROXY}/v1/finance/search?q=${encodeURIComponent(sym)}&newsCount=20&quotesCount=0`,
+      { headers: { "Accept": "application/json" } }
+    );
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    if (!Array.isArray(d) || d.length === 0) return { data: null, error: "empty" };
+    const news = d?.news;
+    if (!Array.isArray(news) || news.length === 0) return { data: null, error: "empty" };
     return {
-      data: d.slice(0, 20).map((item, i) => ({
+      data: news.slice(0, 20).map((item, i) => ({
         id:      `live-${i}`,
-        source:  item.source || "Finnhub",
-        time:    new Date(item.datetime * 1000).toLocaleString(),
+        source:  item.publisher || "Yahoo Finance",
+        time:    new Date(item.providerPublishTime * 1000).toLocaleString(),
         sector:  "general",
-        tag:     symbol.toUpperCase(),
-        title:   item.headline,
-        summary: item.summary || item.headline,
-        url:     item.url || "#",
+        tag:     sym,
+        title:   item.title,
+        summary: item.title,
+        url:     item.link || "#",
         isLive:  true,
       })),
       error: null,
@@ -1189,26 +1279,33 @@ async function fetchTickerNews(symbol) {
   } catch(e) { return { data: null, error: e.message }; }
 }
 
-// Fetch general market news from Finnhub
+// General market news — Yahoo Finance trending/general news
 async function fetchGeneralNews(category="general") {
   try {
+    const queryMap = {
+      general: "stock market", tech: "technology stocks", finance: "finance banking",
+      crypto: "cryptocurrency bitcoin", energy: "oil energy stocks",
+      health: "healthcare pharma", forex: "currency forex dollar",
+    };
+    const q = queryMap[category] || "stock market";
     const r = await fetch(
-      `https://finnhub.io/api/v1/news?category=${category}&token=${API_KEY}`,
-      { headers: { "X-Finnhub-Token": API_KEY } }
+      `${YF_PROXY}/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=20&quotesCount=0`,
+      { headers: { "Accept": "application/json" } }
     );
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    if (!Array.isArray(d) || d.length === 0) return { data: null, error: "empty" };
+    const news = d?.news;
+    if (!Array.isArray(news) || news.length === 0) return { data: null, error: "empty" };
     return {
-      data: d.slice(0, 20).map((item, i) => ({
+      data: news.slice(0, 20).map((item, i) => ({
         id:      `gen-${i}`,
-        source:  item.source || "Finnhub",
-        time:    new Date(item.datetime * 1000).toLocaleString(),
+        source:  item.publisher || "Yahoo Finance",
+        time:    new Date(item.providerPublishTime * 1000).toLocaleString(),
         sector:  category,
         tag:     category.toUpperCase(),
-        title:   item.headline,
-        summary: item.summary || item.headline,
-        url:     item.url || "#",
+        title:   item.title,
+        summary: item.title,
+        url:     item.link || "#",
         isLive:  true,
       })),
       error: null,
@@ -3953,7 +4050,6 @@ function LoadingScreen({progress,label}){
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-const C_API_KEY   = "d6lqm0pr01quej914cm0d6lqm0pr01quej914cmg";
 const C_BG        = "#0a0e14";
 const PANEL_BG  = "#0d1420";
 const C_BORDER    = "#1a2535";
@@ -3976,13 +4072,13 @@ const TOOLS = [
 ];
 
 const CHART_TIMEFRAMES = [
-  { label:"1D",  resolution:"5",   days:1,   barLabel:"5m"  },
-  { label:"1W",  resolution:"15",  days:7,   barLabel:"15m" },
-  { label:"1M",  resolution:"60",  days:30,  barLabel:"1h"  },
-  { label:"3M",  resolution:"D",   days:90,  barLabel:"1D"  },
-  { label:"6M",  resolution:"D",   days:180, barLabel:"1D"  },
-  { label:"1Y",  resolution:"W",   days:365, barLabel:"1W"  },
-  { label:"2Y",  resolution:"W",   days:730, barLabel:"1W"  },
+  { label:"1D",  interval:"5m",  range:"1d",   days:1,   barLabel:"5m"  },
+  { label:"1W",  interval:"1h",  range:"5d",   days:7,   barLabel:"1h"  },
+  { label:"1M",  interval:"1d",  range:"1mo",  days:30,  barLabel:"1D"  },
+  { label:"3M",  interval:"1d",  range:"3mo",  days:90,  barLabel:"1D"  },
+  { label:"6M",  interval:"1d",  range:"6mo",  days:180, barLabel:"1D"  },
+  { label:"1Y",  interval:"1wk", range:"1y",   days:365, barLabel:"1W"  },
+  { label:"2Y",  interval:"1wk", range:"2y",   days:730, barLabel:"1W"  },
 ];
 
 const MA_COLORS = { 20:"#b8e8ff", 50:"#c8dff0", 200:"#c8dff0" };
@@ -4007,27 +4103,27 @@ function genOHLCV(base, points, vol = 0.012) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API FETCH
+// API FETCH — Yahoo Finance
 // ─────────────────────────────────────────────────────────────────────────────
-async function fetchOHLCV(symbol, resolution, days) {
+async function fetchOHLCV(symbol, interval, range) {
   try {
-    const to   = Math.floor(Date.now() / 1000);
-    const from = to - days * 86400;
-    const isCrypto = symbol.includes(":");
-    const base = isCrypto
-      ? `https://finnhub.io/api/v1/crypto/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${C_API_KEY}`
-      : `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${C_API_KEY}`;
-    const r = await fetch(base);
+    const ySym = toYahooSymbol(symbol);
+    const r = await fetch(
+      `${YF_PROXY}/v8/finance/chart/${encodeURIComponent(ySym)}?interval=${interval}&range=${range}`,
+      { headers: { "Accept": "application/json" } }
+    );
     const d = await r.json();
-    if (d.s !== "ok" || !d.c?.length) return null;
-    return d.t.map((t, i) => ({
+    const result = d?.chart?.result?.[0];
+    if (!result?.timestamp || !result?.indicators?.quote?.[0]) return null;
+    const q = result.indicators.quote[0];
+    return result.timestamp.map((t, i) => ({
       t: i, ts: t,
-      open:   +d.o[i].toFixed(4),
-      high:   +d.h[i].toFixed(4),
-      low:    +d.l[i].toFixed(4),
-      close:  +d.c[i].toFixed(4),
-      volume: d.v ? d.v[i] : 0,
-    }));
+      open:   q.open[i]   != null ? +q.open[i].toFixed(4)   : null,
+      high:   q.high[i]   != null ? +q.high[i].toFixed(4)   : null,
+      low:    q.low[i]    != null ? +q.low[i].toFixed(4)     : null,
+      close:  q.close[i]  != null ? +q.close[i].toFixed(4)  : null,
+      volume: q.volume[i] ?? 0,
+    })).filter(b => b.close != null);
   } catch { return null; }
 }
 
@@ -4751,15 +4847,15 @@ function ChartTab() {
   const loadChart = useCallback(async (sym, timeframe) => {
     setLoading(true); setError(null);
     const isCrypto = ["BTC","ETH","SOL","BNB","XRP"].includes(sym.toUpperCase());
-    const finnSym  = isCrypto ? `BINANCE:${sym.toUpperCase()}USDT` : sym.toUpperCase();
-    let data = await fetchOHLCV(finnSym, timeframe.resolution, timeframe.days);
+    const ySym = isCrypto ? `BINANCE:${sym.toUpperCase()}USDT` : sym.toUpperCase();
+    let data = await fetchOHLCV(ySym, timeframe.interval, timeframe.range);
     if (!data) {
       // fallback to simulation
-      const bases = {AAPL:185,TSLA:175,NVDA:875,MSFT:415,AMZN:185,GOOGL:170,META:505,JPM:198,SPY:520,QQQ:440,BTC:67500,ETH:3520};
+      const bases = {AAPL:220,TSLA:278,NVDA:880,MSFT:388,AMZN:208,GOOGL:165,META:590,JPM:238,SPY:574,QQQ:488,BTC:83000,ETH:2000};
       const base  = bases[sym.toUpperCase()] || 100;
-      const pts   = timeframe.days <= 1 ? 78 : timeframe.days <= 7 ? 168 : timeframe.days <= 30 ? 120 : timeframe.days <= 90 ? 90 : timeframe.days <= 180 ? 130 : 260;
+      const pts   = timeframe.days <= 1 ? 78 : timeframe.days <= 7 ? 120 : timeframe.days <= 30 ? 120 : timeframe.days <= 90 ? 90 : timeframe.days <= 180 ? 130 : 260;
       data = genOHLCV(base, pts, base > 1000 ? 0.018 : 0.012);
-      setError("Live data unavailable in preview — showing simulated data. Will be live on Vercel.");
+      setError("Live data unavailable — showing simulated data.");
     }
     setBars(data);
     setLoading(false);
