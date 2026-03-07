@@ -261,8 +261,9 @@ const BREADTH_POINT_MAP = {"1D":78,"1W":5,"1M":22,"3M":66,"6M":130};
 // API — Yahoo Finance (15-min delayed, no key required)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const YF_PROXY  = "https://corsproxy.io/?https://query1.finance.yahoo.com";
-const YF_PROXY2 = "https://corsproxy.io/?https://query2.finance.yahoo.com";
+const YF_BASE   = "/api/yahoo";  // Vercel serverless proxy — no CORS issues
+const YF_PROXY  = YF_BASE;
+const YF_PROXY2 = YF_BASE;
 
 // Map our internal symbols to Yahoo Finance symbols
 function toYahooSymbol(symbol) {
@@ -284,7 +285,7 @@ async function fetchQuote(symbol) {
   const ySym = toYahooSymbol(symbol);
   try {
     const r = await fetch(
-      `${YF_PROXY}/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=5d`
+      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=1d&range=5d`
     );
     const d = await r.json();
     const meta = d?.chart?.result?.[0]?.meta;
@@ -303,7 +304,7 @@ async function fetchYahooCandles(symbol, interval, range) {
   const ySym = toYahooSymbol(symbol);
   try {
     const r = await fetch(
-      `${YF_PROXY}/v8/finance/chart/${encodeURIComponent(ySym)}?interval=${interval}&range=${range}`
+      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=${interval}&range=${range}`
     );
     const d = await r.json();
     const result = d?.chart?.result?.[0];
@@ -340,7 +341,7 @@ async function fetchDailyCandles(symbol, days = 120) {
 async function fetchFinnhubMetrics(symbol) {
   try {
     const r = await fetch(
-      `${YF_PROXY}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,financialData,summaryDetail`
+      `${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(symbol)}&modules=defaultKeyStatistics,financialData,summaryDetail`
     );
     const d = await r.json();
     const s = d?.quoteSummary?.result?.[0];
@@ -381,7 +382,7 @@ async function fetchFinnhubMetrics(symbol) {
 async function fetchProfile(symbol) {
   try {
     const r = await fetch(
-      `${YF_PROXY}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=assetProfile,price`
+      `${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(symbol)}&modules=assetProfile,price`
     );
     const d = await r.json();
     const s = d?.quoteSummary?.result?.[0];
@@ -1251,7 +1252,7 @@ async function fetchTickerNews(symbol) {
   try {
     const sym = symbol.toUpperCase();
     const r = await fetch(
-      `${YF_PROXY}/v1/finance/search?q=${encodeURIComponent(sym)}&newsCount=20&quotesCount=0`
+      `${YF_PROXY}?path=v1/finance/search&q=${encodeURIComponent(sym)}&newsCount=20&quotesCount=0`
     );
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
@@ -1284,7 +1285,7 @@ async function fetchGeneralNews(category="general") {
     };
     const q = queryMap[category] || "stock market";
     const r = await fetch(
-      `${YF_PROXY}/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=20&quotesCount=0`
+      `${YF_PROXY}?path=v1/finance/search&q=${encodeURIComponent(q)}&newsCount=20&quotesCount=0`
     );
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
@@ -4103,7 +4104,7 @@ async function fetchOHLCV(symbol, interval, range) {
   try {
     const ySym = toYahooSymbol(symbol);
     const r = await fetch(
-      `${YF_PROXY}/v8/finance/chart/${encodeURIComponent(ySym)}?interval=${interval}&range=${range}`
+      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=${interval}&range=${range}`
     );
     const d = await r.json();
     const result = d?.chart?.result?.[0];
