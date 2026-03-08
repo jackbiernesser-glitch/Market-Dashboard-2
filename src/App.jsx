@@ -1993,8 +1993,9 @@ async function loadLiveThematicData(onProgress) {
   // Fetch VIX separately with dedicated function
   quotes["^VIX"] = await fetchVIX();
 
-  // Fetch 1Y daily candles for factor ETFs + SPY (for RS calculation)
-  const candleSyms = [...Object.values(FACTOR_ETFS).map(f => f.ticker), "SPY"];
+  // Fetch 1Y daily candles for factor ETFs + RRG sector/factor ETFs + SPY
+  const rrgSyms = [...RRG_SECTORS.map(r => r.id), ...RRG_FACTORS.map(r => r.id)];
+  const candleSyms = [...new Set([...Object.values(FACTOR_ETFS).map(f => f.ticker), ...rrgSyms, "SPY"])];
   for (let i = 0; i < candleSyms.length; i += CHUNK) {
     const chunk = candleSyms.slice(i, i + CHUNK);
     await Promise.all(chunk.map(async sym => {
@@ -5209,76 +5210,130 @@ const SECTOR_COLOR = {
 };
 
 async function fetchEarningsCalBatch(tickers) {
-  const results = [];
-  const CHUNK = 8;
-  for (let i = 0; i < tickers.length; i += CHUNK) {
-    const chunk = tickers.slice(i, i + CHUNK);
-    await Promise.all(chunk.map(async ticker => {
-      try {
-        const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${ticker}&modules=calendarEvents%2CearningsHistory%2Cprice`);
-        if (!r.ok) return;
-        const d = await r.json();
-        const s = d?.quoteSummary?.result?.[0];
-        if (!s) return;
-        const cal   = s.calendarEvents?.earnings;
-        const price = s.price;
-        const hist  = s.earningsHistory?.history ?? [];
-        const dates = cal?.earningsDate ?? [];
-        if (dates.length === 0) return;
-
-        // Yahoo returns earningsDate as array; [0] = next date, sometimes two
-        // dates straddle the expected window — take the earliest future one
-        const now = Date.now() / 1000;
-        const next = dates.find(d => d.raw > now - 86400) ?? dates[0];
-        if (!next) return;
-
-        // Timing: Yahoo sometimes puts BMO/AMC in the second date object
-        // or in earningsCallTime. We try both.
-        const callTime = cal.earningsCallTime ??
-          (dates[1] ? (dates[1].raw - dates[0].raw < 86400 ? "AMC" : null) : null);
-        const time = callTime === "BMO" ? "Before Open"
-                   : callTime === "AMC" ? "After Close"
-                   : "TBD";
-
-        results.push({
-          ticker,
-          company:    price?.shortName ?? price?.longName ?? ticker,
-          date:       new Date(next.raw * 1000).toISOString().slice(0, 10),
-          time,
-          epsEst:     cal.epsEstimate?.raw     ?? null,
-          epsActual:  null,
-          revenueEst: cal.revenueEstimate?.raw ?? null,
-          lastEps:    hist.length > 0 ? (hist[hist.length - 1]?.epsActual?.raw ?? null) : null,
-          sector:     SECTOR_MAP[ticker] ?? "Other",
-        });
-      } catch {}
-    }));
-  }
-  // Filter to only future dates, sort chronologically
+  const now = Date.now() / 1000;
   const today = new Date().toISOString().slice(0, 10);
-  return results
-    .filter(r => r.date >= today)
+
+  // Fire all requests simultaneously — each with its own 6s timeout
+  // No chunking loop means no sequential stalling
+  const settled = await Promise.allSettled(tickers.map(async ticker => {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 6000);
+    try {
+      const r = await fetch(
+        `${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(ticker)}&modules=calendarEvents%2Cprice`,
+        { signal: controller.signal }
+      );
+      clearTimeout(t);
+      if (!r.ok) return null;
+      const d = await r.json();
+      const s = d?.quoteSummary?.result?.[0];
+      if (!s) return null;
+      const cal   = s.calendarEvents?.earnings;
+      const price = s.price;
+      const dates = cal?.earningsDate ?? [];
+      if (dates.length === 0) return null;
+
+      const next = dates.find(d => d.raw > now - 86400) ?? dates[0];
+      if (!next) return null;
+
+      const callTime = cal.earningsCallTime;
+      const time = callTime === "BMO" ? "Before Open"
+                 : callTime === "AMC" ? "After Close"
+                 : "TBD";
+
+      return {
+        ticker,
+        company:    price?.shortName ?? price?.longName ?? ticker,
+        date:       new Date(next.raw * 1000).toISOString().slice(0, 10),
+        time,
+        epsEst:     cal.epsEstimate?.raw     ?? null,
+        epsActual:  null,
+        revenueEst: cal.revenueEstimate?.raw ?? null,
+        sector:     SECTOR_MAP[ticker] ?? "Other",
+      };
+    } catch {
+      clearTimeout(t);
+      return null;
+    }
+  }));
+
+  return settled
+    .filter(r => r.status === "fulfilled" && r.value?.date >= today)
+    .map(r => r.value)
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function EarningsCalView() {
   const [rows,      setRows]      = useState([]);
   const [loading,   setLoading]   = useState(true);
+  const [fetched,   setFetched]   = useState(0);
   const [sector,    setSector]    = useState("All");
   const [timeFilter,setTimeFilter]= useState("All");
   const [selected,  setSelected]  = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const data = await fetchEarningsCalBatch(EARNINGS_WATCHLIST);
-      if (!cancelled) {
-        setRows(data);
-        setSelected(data[0] ?? null);
-        setLoading(false);
+    const total = EARNINGS_WATCHLIST.length;
+    const today = new Date().toISOString().slice(0, 10);
+    const now   = Date.now() / 1000;
+    let count   = 0;
+    const accumulated = [];
+
+    setLoading(true);
+    setRows([]);
+    setFetched(0);
+
+    // Fire all requests at once; update UI progressively as each resolves
+    Promise.allSettled(EARNINGS_WATCHLIST.map(async ticker => {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 6000);
+      try {
+        const r = await fetch(
+          `${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(ticker)}&modules=calendarEvents%2Cprice`,
+          { signal: controller.signal }
+        );
+        clearTimeout(t);
+        if (!r.ok) return;
+        const d = await r.json();
+        const s = d?.quoteSummary?.result?.[0];
+        if (!s) return;
+        const cal   = s.calendarEvents?.earnings;
+        const price = s.price;
+        const dates = cal?.earningsDate ?? [];
+        if (!dates.length) return;
+        const next = dates.find(d => d.raw > now - 86400) ?? dates[0];
+        if (!next || new Date(next.raw * 1000).toISOString().slice(0, 10) < today) return;
+        const callTime = cal.earningsCallTime;
+        const row = {
+          ticker,
+          company:    price?.shortName ?? price?.longName ?? ticker,
+          date:       new Date(next.raw * 1000).toISOString().slice(0, 10),
+          time:       callTime === "BMO" ? "Before Open" : callTime === "AMC" ? "After Close" : "TBD",
+          epsEst:     cal.epsEstimate?.raw     ?? null,
+          epsActual:  null,
+          revenueEst: cal.revenueEstimate?.raw ?? null,
+          sector:     SECTOR_MAP[ticker] ?? "Other",
+        };
+        accumulated.push(row);
+      } catch { clearTimeout(t); }
+    }).map(p => p.then(() => {
+      if (cancelled) return;
+      count++;
+      setFetched(count);
+      // Update rows every 20 resolutions so UI stays responsive
+      if (count % 20 === 0 || count === total) {
+        const sorted = [...accumulated].sort((a, b) => a.date.localeCompare(b.date));
+        setRows(sorted);
+        if (!selected && sorted.length > 0) setSelected(sorted[0]);
       }
-    })();
+    }))).then(() => {
+      if (cancelled) return;
+      const sorted = [...accumulated].sort((a, b) => a.date.localeCompare(b.date));
+      setRows(sorted);
+      if (sorted.length > 0) setSelected(s => s ?? sorted[0]);
+      setLoading(false);
+    });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -5311,7 +5366,7 @@ function EarningsCalView() {
         <div>
           <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>EARNINGS CALENDAR</div>
           <div style={{color:loading?"#6890a8":"#7dd3f0",fontSize:8,marginTop:3,letterSpacing:1}}>
-            {loading ? "◌ FETCHING…" : `● ${filtered.length} EVENTS · NEXT 45 DAYS`}
+            {loading ? `◌ LOADING… ${fetched}/${EARNINGS_WATCHLIST.length}` : `● ${filtered.length} EVENTS · NEXT 45 DAYS`}
           </div>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
