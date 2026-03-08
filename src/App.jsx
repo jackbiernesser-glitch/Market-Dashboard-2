@@ -141,8 +141,7 @@ const NAV_TABS   = [
   {key:"factors",      label:"Factors",      icon:"◑"},
   {key:"rrg",          label:"RRG",          icon:"⊕"},
   {key:"corr",         label:"Correlation",  icon:"⊠"},
-  {key:"options",      label:"Options",      icon:"Ω"},
-  {key:"earnings",     label:"Earnings",     icon:"◎"},
+  {key:"earnings",     label:"Earnings Cal", icon:"◎"},
   {key:"ecocal",       label:"Eco Calendar", icon:"⧖"},
   {key:"news",         label:"News",         icon:"◻"},
 ];
@@ -4687,55 +4686,6 @@ function IndustriesView({ liveQuotes, thematicLoading }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // FETCH HELPERS FOR NEW VIEWS
 // ─────────────────────────────────────────────────────────────────────────────
-async function fetchOptionsChain(symbol) {
-  // Try both v8 and v7 endpoints as Yahoo has changed this over time
-  for (const ver of ["v8","v7"]) {
-    try {
-      const r = await fetch(`${YF_PROXY}?path=${ver}/finance/options/${encodeURIComponent(symbol)}`);
-      if (!r.ok) continue;
-      const d = await r.json();
-      const result = d?.optionChain?.result?.[0];
-      if (!result) continue;
-      const quote = result.quote;
-      const opts  = result.options?.[0];
-      return {
-        price:      quote?.regularMarketPrice ?? null,
-        expDates:   result.expirationDates ?? [],
-        calls:      opts?.calls ?? [],
-        puts:       opts?.puts  ?? [],
-      };
-    } catch {}
-  }
-  return null;
-}
-
-async function fetchOptionsForExp(symbol, expTimestamp) {
-  for (const ver of ["v8","v7"]) {
-    try {
-      const r = await fetch(`${YF_PROXY}?path=${ver}/finance/options/${encodeURIComponent(symbol)}&date=${expTimestamp}`);
-      if (!r.ok) continue;
-      const d = await r.json();
-      const opts = d?.optionChain?.result?.[0]?.options?.[0];
-      if (opts) return { calls: opts.calls ?? [], puts: opts.puts ?? [] };
-    } catch {}
-  }
-  return { calls: [], puts: [] };
-}
-
-async function fetchEarningsCalendar(symbol) {
-  try {
-    const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(symbol)}&modules=earnings%2CearningsHistory%2CcalendarEvents%2CearningsTrend`);
-    const d = await r.json();
-    const s = d?.quoteSummary?.result?.[0];
-    if (!s) return null;
-    return {
-      earningsHistory: s.earningsHistory?.history ?? [],
-      nextEarnings:    s.calendarEvents?.earnings ?? null,
-      earningsChart:   s.earnings?.earningsChart ?? null,
-      earningsTrend:   s.earningsTrend?.trend ?? [],
-    };
-  } catch { return null; }
-}
 
 async function fetchFredSeries(seriesId) {
   try {
@@ -5084,371 +5034,298 @@ function CorrView({ allData }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OPTIONS CHAIN VIEW
-// ─────────────────────────────────────────────────────────────────────────────
-function OptionsView() {
-  const [input,    setInput]    = useState("AAPL");
-  const [symbol,   setSymbol]   = useState("AAPL");
-  const [data,     setData]     = useState(null);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
-  const [expIdx,   setExpIdx]   = useState(0);
-  const [side,     setSide]     = useState("both");
-  const [expDates, setExpDates] = useState([]);
-  const POPULAR = ["AAPL","TSLA","NVDA","SPY","QQQ","MSFT","AMZN","META","AMD"];
-
-  const search = async (sym) => {
-    const s = sym.trim().toUpperCase();
-    if (!s) return;
-    setLoading(true); setData(null); setExpIdx(0); setError(null);
-    const raw = await fetchOptionsChain(s);
-    if (raw && raw.expDates.length > 0) {
-      setData(raw); setExpDates(raw.expDates); setSymbol(s);
-    } else {
-      setError(`No options data found for ${s}. Try a large-cap US equity like AAPL, TSLA, or SPY.`);
-    }
-    setLoading(false);
-  };
-
-  const loadExp = async (idx) => {
-    setExpIdx(idx);
-    if (!expDates[idx] || !data) return;
-    setLoading(true);
-    const res = await fetchOptionsForExp(symbol, expDates[idx]);
-    setData(prev => ({...prev, calls: res.calls, puts: res.puts}));
-    setLoading(false);
-  };
-
-  useEffect(() => { search("AAPL"); }, []);
-
-  const fmtExp = ts => { const d=new Date(ts*1000); return `${d.toLocaleString('default',{month:'short'})} ${d.getDate()} '${String(d.getFullYear()).slice(-2)}`; };
-  const itm = (strike, isCall) => data?.price ? (isCall ? strike < data.price : strike > data.price) : false;
-
-  const calls = data?.calls ?? [];
-  const puts  = data?.puts  ?? [];
-  const strikes = [...new Set([...calls.map(c=>c.strike), ...puts.map(p=>p.strike)])].sort((a,b)=>a-b);
-
-  const callMap = Object.fromEntries(calls.map(c=>[c.strike, c]));
-  const putMap  = Object.fromEntries(puts.map(p=>[p.strike, p]));
-
-  return (
-    <div style={{padding:"0 4px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div>
-          <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>OPTIONS CHAIN</div>
-          <div style={{color:"#6890a8",fontSize:8,marginTop:3,letterSpacing:1}}>
-            {data ? `● LIVE · ${symbol} · SPOT $${data.price?.toFixed(2)}` : "ENTER A TICKER TO LOAD CHAIN"}
-          </div>
-        </div>
-        <div style={{display:"flex",gap:6}}>
-          <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())}
-            onKeyDown={e=>e.key==="Enter"&&search(input)}
-            placeholder="SYMBOL"
-            style={{background:"#0d1420",border:"1px solid #1a2535",color:"#e8f4f8",borderRadius:6,padding:"5px 10px",fontSize:9,fontFamily:"'Space Mono',monospace",width:100,outline:"none"}}/>
-          <button onClick={()=>search(input)} style={{background:MAIN_COL+"20",border:`1px solid ${MAIN_COL}`,color:MAIN_COL,borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>LOAD</button>
-        </div>
-      </div>
-
-      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-        {POPULAR.map(t=>(
-          <button key={t} onClick={()=>{setInput(t);search(t);}} style={{background:"none",border:"1px solid #1a2535",color:"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</button>
-        ))}
-      </div>
-
-      {loading && <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>◌ FETCHING OPTIONS CHAIN…</div>}
-      {!loading && error && <div style={{color:"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>{error}</div>}
-
-      {!loading && data && (
-        <>
-          {/* Expiry selector */}
-          <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
-            {expDates.slice(0,12).map((ts,i)=>(
-              <button key={ts} onClick={()=>loadExp(i)} style={{background:expIdx===i?MAIN_COL+"20":"none",border:`1px solid ${expIdx===i?MAIN_COL:"#1a2535"}`,color:expIdx===i?MAIN_COL:"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{fmtExp(ts)}</button>
-            ))}
-          </div>
-          {/* Side toggle */}
-          <div style={{display:"flex",gap:4,marginBottom:12}}>
-            {[["both","CALLS + PUTS"],["calls","CALLS"],["puts","PUTS"]].map(([k,l])=>(
-              <button key={k} onClick={()=>setSide(k)} style={{background:side===k?MAIN_COL+"20":"none",border:`1px solid ${side===k?MAIN_COL:"#1a2535"}`,color:side===k?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{l}</button>
-            ))}
-          </div>
-
-          {/* Chain table */}
-          <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"'Space Mono',monospace",fontSize:9}}>
-              <thead>
-                <tr style={{borderBottom:"1px solid #1a2535"}}>
-                  {side!=="puts"&&<>
-                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>OI</th>
-                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>VOL</th>
-                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>IV</th>
-                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>BID</th>
-                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>ASK</th>
-                  </>}
-                  <th style={{color:"#e8f4f8",padding:"8px 12px",textAlign:"center",background:"#0a0e14",fontWeight:700}}>STRIKE</th>
-                  {side!=="calls"&&<>
-                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>BID</th>
-                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>ASK</th>
-                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>IV</th>
-                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>VOL</th>
-                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>OI</th>
-                  </>}
-                </tr>
-              </thead>
-              <tbody>
-                {strikes.map(strike=>{
-                  const c = callMap[strike];
-                  const p = putMap[strike];
-                  const atmish = data.price && Math.abs(strike - data.price) < (strikes[1]-strikes[0])*1.5;
-                  return (
-                    <tr key={strike} style={{borderBottom:"1px solid #111a24",background:atmish?"#7dd3f008":"transparent"}}>
-                      {side!=="puts"&&<>
-                        <td style={{color:"#6890a8",padding:"5px 10px",textAlign:"right"}}>{c?.openInterest?.toLocaleString()??"—"}</td>
-                        <td style={{color:"#a8c4d4",padding:"5px 10px",textAlign:"right"}}>{c?.volume?.toLocaleString()??"—"}</td>
-                        <td style={{color:"#c8dff0",padding:"5px 10px",textAlign:"right"}}>{c?.impliedVolatility!=null?`${(c.impliedVolatility*100).toFixed(1)}%`:"—"}</td>
-                        <td style={{color:"#7dd3f0",padding:"5px 10px",textAlign:"right"}}>{c?.bid?.toFixed(2)??"—"}</td>
-                        <td style={{color:"#7dd3f0",padding:"5px 10px",textAlign:"right",background:itm(strike,true)?"#7dd3f008":"transparent"}}>{c?.ask?.toFixed(2)??"—"}</td>
-                      </>}
-                      <td style={{color:"#e8f4f8",padding:"5px 12px",textAlign:"center",background:"#0a0e14",fontWeight:700,fontSize:10}}>{strike}</td>
-                      {side!=="calls"&&<>
-                        <td style={{color:"#ff5f6d",padding:"5px 10px",textAlign:"left",background:itm(strike,false)?"#ff5f6d08":"transparent"}}>{p?.bid?.toFixed(2)??"—"}</td>
-                        <td style={{color:"#ff5f6d",padding:"5px 10px",textAlign:"left"}}>{p?.ask?.toFixed(2)??"—"}</td>
-                        <td style={{color:"#c8dff0",padding:"5px 10px",textAlign:"left"}}>{p?.impliedVolatility!=null?`${(p.impliedVolatility*100).toFixed(1)}%`:"—"}</td>
-                        <td style={{color:"#a8c4d4",padding:"5px 10px",textAlign:"left"}}>{p?.volume?.toLocaleString()??"—"}</td>
-                        <td style={{color:"#6890a8",padding:"5px 10px",textAlign:"left"}}>{p?.openInterest?.toLocaleString()??"—"}</td>
-                      </>}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div style={{color:"#6890a8",fontSize:8,marginTop:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
-            ITM HIGHLIGHTED · CALLS LEFT (BLUE) · PUTS RIGHT (RED) · DATA VIA YAHOO FINANCE
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+const IMPACT_COL = {high:"#ff5f6d", medium:"#f59e0b", low:"#7dd3f0"};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EARNINGS VIEW
+// EARNINGS CALENDAR VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-function EarningsView() {
-  const [input,   setInput]   = useState("AAPL");
-  const [symbol,  setSymbol]  = useState("AAPL");
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(null);
-  const POPULAR = ["AAPL","MSFT","NVDA","META","GOOGL","AMZN","TSLA","JPM","V","NFLX"];
 
-  const search = async (sym) => {
-    const s = sym.trim().toUpperCase();
-    if (!s) return;
-    setLoading(true); setData(null); setError(null);
-    const raw = await fetchEarningsCalendar(s);
-    if (raw && (raw.earningsHistory?.length > 0 || raw.earningsChart || raw.nextEarnings)) {
-      setData(raw); setSymbol(s);
-    } else {
-      setError(`No earnings data found for ${s}. Try a major US stock like AAPL, MSFT, or NVDA.`);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => { search("AAPL"); }, []);
-
-  const beatColor = (actual, estimate) => {
-    if (actual == null || estimate == null) return "#6890a8";
-    return actual >= estimate ? "#7dd3f0" : "#ff5f6d";
-  };
-  const beatLabel = (actual, estimate) => {
-    if (actual == null) return "—";
-    if (estimate == null) return actual.toFixed(2);
-    const diff = actual - estimate;
-    return diff >= 0 ? `BEAT +${diff.toFixed(2)}` : `MISS ${diff.toFixed(2)}`;
-  };
-
-  const history = data?.earningsHistory ?? [];
-  const chart   = data?.earningsChart;
-  const next    = data?.nextEarnings;
-
-  // Build quarterly EPS series from earningsChart
-  const epsSeries = chart?.quarterly?.map(q => ({
-    date:     q.date,
-    actual:   q.actual?.raw ?? null,
-    estimate: q.estimate?.raw ?? null,
-    surprise: q.actual != null && q.estimate != null ? +((q.actual.raw - q.estimate.raw) / Math.abs(q.estimate.raw) * 100).toFixed(1) : null,
-  })) ?? [];
-
-  const annSeries = chart?.yearly?.map(y => ({
-    date:     y.date,
-    actual:   y.earnings?.raw ?? null,
-    revenue:  y.revenue?.raw != null ? +(y.revenue.raw/1e9).toFixed(1) : null,
-  })) ?? [];
-
-  return (
-    <div style={{padding:"0 4px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div>
-          <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>EARNINGS — ERN</div>
-          <div style={{color:"#6890a8",fontSize:8,marginTop:3,letterSpacing:1}}>{data?"● LIVE · EPS HISTORY & ESTIMATES":"SEARCH A TICKER"}</div>
-        </div>
-        <div style={{display:"flex",gap:6}}>
-          <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())}
-            onKeyDown={e=>e.key==="Enter"&&search(input)}
-            placeholder="SYMBOL"
-            style={{background:"#0d1420",border:"1px solid #1a2535",color:"#e8f4f8",borderRadius:6,padding:"5px 10px",fontSize:9,fontFamily:"'Space Mono',monospace",width:100,outline:"none"}}/>
-          <button onClick={()=>search(input)} style={{background:MAIN_COL+"20",border:`1px solid ${MAIN_COL}`,color:MAIN_COL,borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>LOAD</button>
-        </div>
-      </div>
-
-      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
-        {POPULAR.map(t=>(
-          <button key={t} onClick={()=>{setInput(t);search(t);}} style={{background:"none",border:"1px solid #1a2535",color:"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</button>
-        ))}
-      </div>
-
-      {loading && <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>◌ FETCHING EARNINGS DATA…</div>}
-      {!loading && error && <div style={{color:"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>{error}</div>}
-
-      {!loading && data && (
-        <div style={{display:"grid",gap:14}}>
-          {/* Next earnings */}
-          {next?.earningsDate && (
-            <div style={{background:"#0d1420",border:"1px solid #7dd3f044",borderRadius:12,padding:"14px 18px",display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
-              <div>
-                <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>NEXT EARNINGS</div>
-                <div style={{color:"#7dd3f0",fontSize:15,fontFamily:"'Space Mono',monospace",fontWeight:700}}>
-                  {new Date(next.earningsDate[0]*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
-                </div>
-              </div>
-              {next.earningsCallTime && (
-                <div>
-                  <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>TIMING</div>
-                  <div style={{color:"#c8dff0",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{next.earningsCallTime==="BMO"?"BEFORE MARKET OPEN":"AFTER MARKET CLOSE"}</div>
-                </div>
-              )}
-              {next.epsEstimate?.raw != null && (
-                <div>
-                  <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>EPS ESTIMATE</div>
-                  <div style={{color:"#c8dff0",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700}}>${next.epsEstimate.raw.toFixed(2)}</div>
-                </div>
-              )}
-              {next.revenueEstimate?.raw != null && (
-                <div>
-                  <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>REV ESTIMATE</div>
-                  <div style={{color:"#c8dff0",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700}}>${(next.revenueEstimate.raw/1e9).toFixed(1)}B</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Quarterly EPS chart */}
-          {epsSeries.length > 0 && (
-            <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"16px 18px"}}>
-              <div style={{color:"#6890a8",fontSize:8,letterSpacing:1.5,marginBottom:12}}>QUARTERLY EPS · ACTUAL vs ESTIMATE</div>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={epsSeries} margin={{top:24,right:8,bottom:0,left:0}} barGap={2} barCategoryGap="25%">
-                  <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
-                  <XAxis dataKey="date" tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                  <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}`}/>
-                  <Tooltip content={({active,payload,label})=>{
-                    if(!active||!payload?.length) return null;
-                    const d=payload[0]?.payload;
-                    return(
-                      <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"8px 12px",fontFamily:"'Space Mono',monospace",fontSize:9}}>
-                        <div style={{color:"#c8dff0",marginBottom:4}}>{label}</div>
-                        <div style={{color:"#7dd3f0"}}>Actual: ${d.actual?.toFixed(2)??'—'}</div>
-                        <div style={{color:"#6890a8"}}>Est: ${d.estimate?.toFixed(2)??'—'}</div>
-                        {d.surprise!=null&&<div style={{color:d.surprise>=0?"#7dd3f0":"#ff5f6d",marginTop:2}}>Surprise: {d.surprise>=0?"+":""}{d.surprise}%</div>}
-                      </div>
-                    );
-                  }}/>
-                  <Bar dataKey="estimate" fill="#6890a833" stroke="#6890a8" strokeWidth={1} radius={[2,2,0,0]} maxBarSize={30}
-                    label={{position:"top",fontSize:7,fill:"#6890a8",fontFamily:"'Space Mono',monospace",formatter:v=>v?`$${v.toFixed(2)}`:""}}/>
-                  <Bar dataKey="actual" maxBarSize={30} radius={[2,2,0,0]}
-                    shape={(props)=>{
-                      const {x,y,width,height,payload}=props;
-                      const beat=payload.actual!=null&&payload.estimate!=null&&payload.actual>=payload.estimate;
-                      const col=payload.actual==null?"#6890a8":beat?"#7dd3f0":"#ff5f6d";
-                      return(
-                        <g>
-                          <rect x={x} y={y} width={width} height={height} fill={col+"55"} stroke={col} strokeWidth={1.5} rx={2}/>
-                          {payload.actual!=null&&<text x={x+width/2} y={y-5} textAnchor="middle" fill={col} fontSize={7} fontFamily="'Space Mono',monospace">${payload.actual.toFixed(2)}</text>}
-                        </g>
-                      );
-                    }}/>
-                </BarChart>
-              </ResponsiveContainer>
-              <div style={{display:"flex",gap:14,marginTop:8}}>
-                <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"#7dd3f055",border:"1px solid #7dd3f0",borderRadius:2}}/><span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>BEAT</span></div>
-                <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"#ff5f6d55",border:"1px solid #ff5f6d",borderRadius:2}}/><span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>MISS</span></div>
-                <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"#6890a833",border:"1px solid #6890a8",borderRadius:2}}/><span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>ESTIMATE</span></div>
-              </div>
-            </div>
-          )}
-
-          {/* History table */}
-          {history.length > 0 && (
-            <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
-              <div style={{color:"#6890a8",fontSize:8,letterSpacing:1.5,padding:"12px 16px",borderBottom:"1px solid #1a2535"}}>EARNINGS HISTORY · BEAT / MISS RECORD</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"'Space Mono',monospace",fontSize:9}}>
-                <thead>
-                  <tr style={{borderBottom:"1px solid #111a24"}}>
-                    {["PERIOD","ACTUAL EPS","ESTIMATE","SURPRISE","SURPRISE %"].map(h=>(
-                      <th key={h} style={{color:"#6890a8",padding:"8px 14px",textAlign:"right",fontWeight:400,letterSpacing:1}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...history].reverse().map((h,i)=>{
-                    const act = h.epsActual?.raw;
-                    const est = h.epsEstimate?.raw;
-                    const diff = act!=null&&est!=null ? +(act-est).toFixed(3) : null;
-                    const pct  = diff!=null&&est!=0   ? +((diff/Math.abs(est))*100).toFixed(1) : null;
-                    const col  = diff==null?"#6890a8":diff>=0?"#7dd3f0":"#ff5f6d";
-                    return (
-                      <tr key={i} style={{borderBottom:"1px solid #111a24",background:i%2===0?"#0d142008":"transparent"}}>
-                        <td style={{color:"#c8dff0",padding:"7px 14px",textAlign:"right"}}>{h.period??h.quarter}</td>
-                        <td style={{color:"#e8f4f8",padding:"7px 14px",textAlign:"right",fontWeight:700}}>{act!=null?`$${act.toFixed(2)}`:"—"}</td>
-                        <td style={{color:"#6890a8",padding:"7px 14px",textAlign:"right"}}>{est!=null?`$${est.toFixed(2)}`:"—"}</td>
-                        <td style={{color:col,padding:"7px 14px",textAlign:"right"}}>{diff!=null?`${diff>=0?"+":""}${diff}`:"—"}</td>
-                        <td style={{color:col,padding:"7px 14px",textAlign:"right",fontWeight:700}}>{pct!=null?`${pct>=0?"+":""}${pct}%`:"—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ECO CALENDAR VIEW
-// ─────────────────────────────────────────────────────────────────────────────
-const ECO_EVENTS = [
-  // US events with FRED series IDs where available
-  {title:"Unemployment Rate",          country:"US", impact:"high",   fred:"UNRATE",   desc:"Monthly US unemployment rate"},
-  {title:"CPI YoY",                    country:"US", impact:"high",   fred:"CPIAUCSL", desc:"Consumer Price Index year-over-year"},
-  {title:"Fed Funds Rate",             country:"US", impact:"high",   fred:"FEDFUNDS", desc:"Federal funds effective rate"},
-  {title:"GDP Growth Rate",            country:"US", impact:"high",   fred:"A191RL1Q225SBEA", desc:"Real GDP % change QoQ"},
-  {title:"Core PCE",                   country:"US", impact:"high",   fred:"PCEPILFE", desc:"Core personal consumption expenditures"},
-  {title:"Retail Sales MoM",           country:"US", impact:"medium", fred:"RSXFS",    desc:"Advance retail sales month-over-month"},
-  {title:"ISM Manufacturing PMI",      country:"US", impact:"medium", fred:"MANEMP",   desc:"Manufacturing employment"},
-  {title:"10Y Treasury Yield",         country:"US", impact:"medium", fred:"DGS10",    desc:"10-year treasury constant maturity rate"},
-  {title:"Initial Jobless Claims",     country:"US", impact:"medium", fred:"ICSA",     desc:"Weekly initial unemployment insurance claims"},
-  {title:"Housing Starts",             country:"US", impact:"low",    fred:"HOUST",    desc:"New privately-owned housing units started"},
-  {title:"PPI YoY",                    country:"US", impact:"medium", fred:null,       desc:"Producer Price Index year-over-year"},
-  {title:"Nonfarm Payrolls",           country:"US", impact:"high",   fred:"PAYEMS",   desc:"Total nonfarm payroll employees"},
+// Major tickers to show earnings for — spans multiple sectors
+const EARNINGS_WATCHLIST = [
+  // Mega-cap tech
+  "AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","ORCL","ADBE","CRM","INTC","AMD",
+  // Financials
+  "JPM","BAC","GS","MS","V","MA","BLK","SCHW",
+  // Healthcare
+  "UNH","JNJ","LLY","ABBV","MRK","PFE","GILD","AMGN",
+  // Consumer / retail
+  "WMT","COST","TGT","MCD","NKE","SBUX","HD",
+  // Energy
+  "XOM","CVX","COP","SLB",
+  // Industrials
+  "GE","CAT","HON","BA","UPS","FDX",
+  // Other
+  "NFLX","DIS","PYPL","UBER","SPOT","SNOW","PLTR",
 ];
 
-const IMPACT_COL = {high:"#ff5f6d", medium:"#f59e0b", low:"#7dd3f0"};
+const SECTOR_MAP = {
+  AAPL:"Tech",MSFT:"Tech",NVDA:"Tech",GOOGL:"Tech",META:"Tech",AMZN:"Tech",TSLA:"Tech",
+  ORCL:"Tech",ADBE:"Tech",CRM:"Tech",INTC:"Tech",AMD:"Tech",
+  JPM:"Finance",BAC:"Finance",GS:"Finance",MS:"Finance",V:"Finance",MA:"Finance",BLK:"Finance",SCHW:"Finance",
+  UNH:"Health",JNJ:"Health",LLY:"Health",ABBV:"Health",MRK:"Health",PFE:"Health",GILD:"Health",AMGN:"Health",
+  WMT:"Consumer",COST:"Consumer",TGT:"Consumer",MCD:"Consumer",NKE:"Consumer",SBUX:"Consumer",HD:"Consumer",
+  XOM:"Energy",CVX:"Energy",COP:"Energy",SLB:"Energy",
+  GE:"Industrial",CAT:"Industrial",HON:"Industrial",BA:"Industrial",UPS:"Industrial",FDX:"Industrial",
+  NFLX:"Media",DIS:"Media",PYPL:"Fintech",UBER:"Tech",SPOT:"Tech",SNOW:"Tech",PLTR:"Tech",
+};
+
+const SECTOR_COLOR = {
+  Tech:"#7dd3f0", Finance:"#34d399", Health:"#f472b6",
+  Consumer:"#fb923c", Energy:"#a3e635", Industrial:"#60a5fa",
+  Media:"#a78bfa", Fintech:"#f59e0b",
+};
+
+async function fetchEarningsCalBatch(tickers) {
+  // Yahoo v1/finance/calendar/earnings returns upcoming earnings for a date range
+  // We also pull calendarEvents from quoteSummary for each ticker in parallel
+  const today = new Date();
+  const in45  = new Date(today.getTime() + 45 * 86400000);
+  const fmt   = d => d.toISOString().slice(0, 10);
+  
+  try {
+    // Fetch upcoming earnings dates via Yahoo calendar endpoint
+    const r = await fetch(
+      `${YF_PROXY}?path=v1/finance/calendar/earnings&startDate=${fmt(today)}&endDate=${fmt(in45)}&size=100`
+    );
+    if (r.ok) {
+      const d = await r.json();
+      const rows = d?.result?.rows ?? [];
+      if (rows.length > 0) {
+        return rows.map(row => ({
+          ticker:     row.ticker ?? "",
+          company:    row.companyshortname ?? row.ticker ?? "",
+          date:       row.startdatetime ? new Date(row.startdatetime).toISOString().slice(0,10) : null,
+          time:       row.startdatetimetype === "BMO" ? "Before Open" : row.startdatetimetype === "AMC" ? "After Close" : "TBD",
+          epsEst:     row.epsestimate ?? null,
+          epsActual:  row.epsactual   ?? null,
+          sector:     SECTOR_MAP[row.ticker] ?? "Other",
+        })).filter(r => r.date);
+      }
+    }
+  } catch {}
+
+  // Fallback: batch quoteSummary for our watchlist
+  const results = [];
+  const CHUNK = 10;
+  for (let i = 0; i < tickers.length; i += CHUNK) {
+    const chunk = tickers.slice(i, i + CHUNK);
+    await Promise.all(chunk.map(async ticker => {
+      try {
+        const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${ticker}&modules=calendarEvents%2CearningsHistory`);
+        if (!r.ok) return;
+        const d = await r.json();
+        const s = d?.quoteSummary?.result?.[0];
+        if (!s) return;
+        const cal = s.calendarEvents?.earnings;
+        const hist = s.earningsHistory?.history ?? [];
+        const dates = cal?.earningsDate ?? [];
+        if (dates.length > 0) {
+          results.push({
+            ticker,
+            company:    ticker,
+            date:       new Date(dates[0].raw * 1000).toISOString().slice(0,10),
+            time:       cal.earningsCallTime === "BMO" ? "Before Open" : cal.earningsCallTime === "AMC" ? "After Close" : "TBD",
+            epsEst:     cal.epsEstimate?.raw ?? null,
+            epsActual:  null,
+            revenueEst: cal.revenueEstimate?.raw ?? null,
+            lastEps:    hist.length > 0 ? hist[hist.length-1]?.epsActual?.raw ?? null : null,
+            sector:     SECTOR_MAP[ticker] ?? "Other",
+          });
+        }
+      } catch {}
+    }));
+  }
+  return results.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function EarningsCalView() {
+  const [rows,      setRows]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [sector,    setSector]    = useState("All");
+  const [timeFilter,setTimeFilter]= useState("All");
+  const [selected,  setSelected]  = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const data = await fetchEarningsCalBatch(EARNINGS_WATCHLIST);
+      if (!cancelled) {
+        setRows(data);
+        setSelected(data[0] ?? null);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const sectors = ["All", ...Object.keys(SECTOR_COLOR)];
+  const times   = ["All", "Before Open", "After Close", "TBD"];
+
+  const filtered = rows.filter(r =>
+    (sector    === "All" || r.sector === sector) &&
+    (timeFilter === "All" || r.time === timeFilter)
+  );
+
+  // Group by date
+  const byDate = filtered.reduce((acc, r) => {
+    (acc[r.date] = acc[r.date] || []).push(r);
+    return acc;
+  }, {});
+
+  const today    = new Date().toISOString().slice(0,10);
+  const fmtDate  = d => {
+    const dt = new Date(d + "T12:00:00");
+    return dt.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
+  };
+  const isToday  = d => d === today;
+  const beat     = r => r.epsActual != null && r.epsEst != null ? r.epsActual >= r.epsEst : null;
+
+  return (
+    <div style={{padding:"0 4px"}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>EARNINGS CALENDAR</div>
+          <div style={{color:loading?"#6890a8":"#7dd3f0",fontSize:8,marginTop:3,letterSpacing:1}}>
+            {loading ? "◌ FETCHING…" : `● ${filtered.length} EVENTS · NEXT 45 DAYS`}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          {/* Sector filter */}
+          <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+            {sectors.map(s => (
+              <button key={s} onClick={() => setSector(s)}
+                style={{background:sector===s?(SECTOR_COLOR[s]||MAIN_COL)+"22":"none",border:`1px solid ${sector===s?(SECTOR_COLOR[s]||MAIN_COL):"#1a2535"}`,color:sector===s?(SECTOR_COLOR[s]||MAIN_COL):"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>
+                {s}
+              </button>
+            ))}
+          </div>
+          {/* Time filter */}
+          <div style={{display:"flex",gap:3}}>
+            {times.map(t => (
+              <button key={t} onClick={() => setTimeFilter(t)}
+                style={{background:timeFilter===t?MAIN_COL+"22":"none",border:`1px solid ${timeFilter===t?MAIN_COL:"#1a2535"}`,color:timeFilter===t?MAIN_COL:"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>
+                {t==="Before Open"?"PRE-MKT":t==="After Close"?"POST-MKT":t.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:60,textAlign:"center"}}>
+          ◌ LOADING EARNINGS CALENDAR…
+        </div>
+      )}
+
+      {!loading && filtered.length === 0 && (
+        <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:60,textAlign:"center"}}>
+          NO EARNINGS EVENTS MATCH YOUR FILTERS
+        </div>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:14}}>
+          {/* Left: date-grouped list */}
+          <div style={{display:"flex",flexDirection:"column",gap:12,maxHeight:"calc(100vh - 200px)",overflowY:"auto",paddingRight:4}}>
+            {Object.entries(byDate).map(([date, events]) => (
+              <div key={date}>
+                {/* Date header */}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <div style={{color:isToday(date)?MAIN_COL:"#a8c4d4",fontSize:9,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:1}}>
+                    {isToday(date) ? "● TODAY" : fmtDate(date)}
+                  </div>
+                  <div style={{flex:1,height:1,background:"#1a2535"}}/>
+                  <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{events.length} co.</div>
+                </div>
+                {/* Earnings cards for this date */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))",gap:6}}>
+                  {events.map(ev => {
+                    const col   = SECTOR_COLOR[ev.sector] ?? "#6890a8";
+                    const isSel = selected?.ticker === ev.ticker;
+                    const b     = beat(ev);
+                    return (
+                      <button key={ev.ticker} onClick={() => setSelected(ev)}
+                        style={{background:isSel?"#152030":"#0d1420",border:`1px solid ${isSel?col:"#1a2535"}`,borderRadius:8,padding:"9px 11px",cursor:"pointer",textAlign:"left",transition:"all 0.12s",outline:"none"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                          <span style={{color:"#e8f4f8",fontSize:11,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{ev.ticker}</span>
+                          <span style={{color:col,background:col+"22",fontSize:7,padding:"1px 5px",borderRadius:3,fontFamily:"'Space Mono',monospace"}}>{ev.sector}</span>
+                        </div>
+                        <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.company}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{color:"#4a6a85",fontSize:7,fontFamily:"'Space Mono',monospace"}}>{ev.time==="Before Open"?"PRE-MKT":ev.time==="After Close"?"POST-MKT":"TBD"}</span>
+                          {ev.epsEst != null && (
+                            <span style={{color:"#c8dff0",fontSize:8,fontFamily:"'Space Mono',monospace"}}>
+                              Est ${ev.epsEst.toFixed(2)}
+                            </span>
+                          )}
+                          {b !== null && (
+                            <span style={{color:b?"#7dd3f0":"#ff5f6d",fontSize:7,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{b?"BEAT":"MISS"}</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Right: selected detail */}
+          {selected && (
+            <div style={{position:"sticky",top:0,display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{background:"#0d1420",border:`1px solid ${(SECTOR_COLOR[selected.sector]||MAIN_COL)}44`,borderRadius:12,padding:"16px 18px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                  <div>
+                    <div style={{color:"#e8f4f8",fontSize:18,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{selected.ticker}</div>
+                    <div style={{color:"#6890a8",fontSize:8,marginTop:2}}>{selected.company}</div>
+                  </div>
+                  <span style={{color:SECTOR_COLOR[selected.sector]||"#6890a8",background:(SECTOR_COLOR[selected.sector]||"#6890a8")+"22",fontSize:8,padding:"2px 8px",borderRadius:4,fontFamily:"'Space Mono',monospace"}}>{selected.sector}</span>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  {[
+                    ["DATE",     selected.date ? fmtDate(selected.date) : "—"],
+                    ["TIMING",   selected.time === "Before Open" ? "PRE-MARKET" : selected.time === "After Close" ? "POST-MARKET" : "TBD"],
+                    ["EPS EST",  selected.epsEst    != null ? `$${selected.epsEst.toFixed(2)}`    : "—"],
+                    ["EPS ACT",  selected.epsActual != null ? `$${selected.epsActual.toFixed(2)}` : "—"],
+                    ["LAST EPS", selected.lastEps   != null ? `$${selected.lastEps.toFixed(2)}`   : "—"],
+                    ["REV EST",  selected.revenueEst!= null ? `$${(selected.revenueEst/1e9).toFixed(1)}B` : "—"],
+                  ].map(([label, val]) => (
+                    <div key={label} style={{background:"#0a0e14",borderRadius:6,padding:"8px 10px"}}>
+                      <div style={{color:"#6890a8",fontSize:7,letterSpacing:1,marginBottom:3,fontFamily:"'Space Mono',monospace"}}>{label}</div>
+                      <div style={{color:"#e8f4f8",fontSize:11,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {beat(selected) !== null && (
+                  <div style={{marginTop:10,textAlign:"center",padding:"8px",borderRadius:6,background:beat(selected)?"#7dd3f011":"#ff5f6d11",border:`1px solid ${beat(selected)?"#7dd3f044":"#ff5f6d44"}`}}>
+                    <span style={{color:beat(selected)?"#7dd3f0":"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>
+                      {beat(selected)?"● BEAT":"● MISS"}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:10,padding:"10px 14px"}}>
+                <div style={{color:"#6890a8",fontSize:7,letterSpacing:1.5,marginBottom:8,fontFamily:"'Space Mono',monospace"}}>UPCOMING THIS WEEK</div>
+                {filtered.slice(0,8).map(ev => (
+                  <button key={ev.ticker} onClick={() => setSelected(ev)}
+                    style={{display:"flex",justifyContent:"space-between",width:"100%",background:"none",border:"none",cursor:"pointer",padding:"4px 0",borderBottom:"1px solid #111a24"}}>
+                    <span style={{color:selected?.ticker===ev.ticker?MAIN_COL:"#c8dff0",fontSize:9,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{ev.ticker}</span>
+                    <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{fmtDate(ev.date)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EcoCalView() {
   const [selected, setSelected] = useState(ECO_EVENTS[0]);
@@ -5719,8 +5596,7 @@ export default function MarketDashboard(){
         {view==="factors"&&factorData&&<FactorView factorData={factorData} liveQuotes={liveQuotes} liveCandles={liveCandles} thematicLoading={thematicLoading}/>}
         {view==="rrg"&&<RRGView liveQuotes={liveQuotes} liveCandles={liveCandles} thematicLoading={thematicLoading}/>}
         {view==="corr"&&<CorrView allData={allData}/>}
-        {view==="options"&&<OptionsView/>}
-        {view==="earnings"&&<EarningsView/>}
+        {view==="earnings"&&<EarningsCalView/>}
         {view==="ecocal"&&<EcoCalView/>}
 
         {/* INDUSTRIES */}
