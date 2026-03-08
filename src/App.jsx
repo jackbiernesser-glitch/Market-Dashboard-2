@@ -287,10 +287,15 @@ async function fetchQuote(symbol) {
       `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=1d&range=5d`
     );
     const d = await r.json();
-    const meta = d?.chart?.result?.[0]?.meta;
+    const result = d?.chart?.result?.[0];
+    const meta = result?.meta;
     if (!meta?.regularMarketPrice) return null;
-    const price     = meta.regularMarketPrice;
-    const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? price;
+    // For indices like ^VIX, read the last actual close from candle data
+    // rather than relying solely on meta which can return stale values
+    const closes = result?.indicators?.quote?.[0]?.close?.filter(c => c != null) ?? [];
+    const price     = closes.length > 0 ? closes[closes.length - 1] : meta.regularMarketPrice;
+    const prevClose = closes.length > 1 ? closes[closes.length - 2]
+                    : meta.previousClose ?? meta.chartPreviousClose ?? price;
     const dp        = +((price - prevClose) / prevClose * 100).toFixed(2);
     return { price, open: meta.regularMarketOpen ?? price, high: meta.regularMarketDayHigh ?? price,
              low: meta.regularMarketDayLow ?? price, prevClose, dp };
@@ -686,7 +691,7 @@ function TfBar({value,onChange,options}){
   return(
     <div style={{display:"flex",gap:6}}>
       {options.map(k=>(
-        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?MAIN_COL+"20":"none",border:`1px solid ${value===k?MAIN_COL:"#1a2535"}`,color:value===k?MAIN_COL:"#162535",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
+        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?MAIN_COL+"20":"none",border:`1px solid ${value===k?MAIN_COL:"#1a2535"}`,color:value===k?MAIN_COL:"#5a7a95",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
       ))}
     </div>
   );
@@ -1044,7 +1049,7 @@ function Ticker({allData}){
           const h=a.histories["1D"],p=pct(h),up=p>=0,price=currentPrice(a,"1D");
           return(
             <span key={i} style={{display:"inline-flex",alignItems:"center",gap:6,marginRight:28,fontSize:10,fontFamily:"'Space Mono',monospace"}}>
-              <span style={{color:"#2a4a65"}}>{a.label}</span>
+              <span style={{color:"#5a7a95"}}>{a.label}</span>
               <span style={{color:"#6890a8"}}>{fmt(price,a.unit,a)}</span>
               <span style={{color:up?"#7dd3f0":"#ff5f6d"}}>{up?"▲":"▼"}{Math.abs(p).toFixed(2)}%</span>
             </span>
@@ -1074,7 +1079,7 @@ function TopMovers({allData,tf,onSelect}){
           </div>
         </div>
         <div style={{textAlign:"right"}}>
-          <div style={{color:"#2a4a65",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{fmt(last,asset.unit,asset)}</div>
+          <div style={{color:"#5a7a95",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{fmt(last,asset.unit,asset)}</div>
           <div style={{color:up?"#7dd3f0":"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{up?"+":""}{p.toFixed(2)}%</div>
         </div>
       </button>
@@ -1101,7 +1106,7 @@ function MarketCard({asset,tf,color,isSelected,isWatched,onSelect,onWatch}){
     <div style={{position:"relative"}}>
       <button onClick={onSelect} style={{width:"100%",background:isSelected?"#152030":"#0d1420",border:`1px solid ${isSelected?color:"#1a2535"}`,borderRadius:10,padding:"13px 13px 9px",cursor:"pointer",textAlign:"left",transition:"all 0.15s",outline:"none",boxShadow:isSelected?`0 0 16px ${color}18`:"none"}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-          <span style={{color:"#2a4a65",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
+          <span style={{color:"#5a7a95",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
             {asset.label} {asset.isLive?<span style={{color:"#22c55e",fontSize:8}}>●</span>:<span style={{color:"#6890a8",fontSize:8}}>○</span>}
           </span>
           <span style={{color:lc,fontSize:9,background:up?"#7dd3f012":"#ff5f6d12",padding:"1px 5px",borderRadius:3,fontFamily:"'Space Mono',monospace"}}>{up?"+":""}{p.toFixed(2)}%</span>
@@ -1119,7 +1124,7 @@ function MarketCard({asset,tf,color,isSelected,isWatched,onSelect,onWatch}){
           </AreaChart>
         </ResponsiveContainer>
       </button>
-      <button onClick={e=>{e.stopPropagation();onWatch();}} style={{position:"absolute",top:9,right:10,background:"none",border:"none",cursor:"pointer",fontSize:13,color:isWatched?"#f59e0b":"#162535",transition:"color 0.15s",lineHeight:1,padding:2}}>
+      <button onClick={e=>{e.stopPropagation();onWatch();}} style={{position:"absolute",top:9,right:10,background:"none",border:"none",cursor:"pointer",fontSize:13,color:isWatched?"#f59e0b":"#4a6a85",transition:"color 0.15s",lineHeight:1,padding:2}}>
         {isWatched?"★":"☆"}
       </button>
     </div>
@@ -1155,7 +1160,7 @@ function DetailChart({asset,tf}){
           </defs>
           <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
           <XAxis dataKey="t" hide/>
-          <YAxis domain={["auto","auto"]} tick={{fill:"#0f1e30",fontSize:9,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={52}
+          <YAxis domain={["auto","auto"]} tick={{fill:"#4a6a85",fontSize:9,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={52}
             tickFormatter={v=>`${asset.unit}${v>=10000?(v/1000).toFixed(0)+"k":v>=1000?(v/1000).toFixed(1)+"k":v}`}/>
           <Tooltip content={<ChartTip unit={asset.unit} asset={asset}/>}/>
           <Area type="monotone" dataKey="value" stroke={lc} strokeWidth={2} fill="url(#det)" dot={false} activeDot={{r:4,fill:lc,strokeWidth:0}}/>
@@ -1259,7 +1264,7 @@ function HeatmapView({heatData, ndxData, tf}){
           {/* index toggle */}
           <div style={{display:"flex",gap:4}}>
             {[{k:"spx",l:"S&P 500"},{k:"ndx",l:"NASDAQ 100"}].map(({k,l})=>(
-              <button key={k} onClick={()=>handleIndexSwitch(k)} style={{background:index===k?"#7dd3f020":"none",border:`1px solid ${index===k?"#7dd3f0":"#1a2535"}`,color:index===k?"#7dd3f0":"#162535",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>{l}</button>
+              <button key={k} onClick={()=>handleIndexSwitch(k)} style={{background:index===k?"#7dd3f020":"none",border:`1px solid ${index===k?"#7dd3f0":"#1a2535"}`,color:index===k?"#7dd3f0":"#5a7a95",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>{l}</button>
             ))}
           </div>
         </div>
@@ -1302,7 +1307,7 @@ function HeatmapView({heatData, ndxData, tf}){
                     {stock.isLive&&<span style={{color:"#22c55e",fontSize:8}}>●</span>}
                   </div>
                   <div>
-                    <div style={{color:"#2a4a65",fontSize:10,fontFamily:"'Space Mono',monospace",marginBottom:2}}>${stock.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                    <div style={{color:"#5a7a95",fontSize:10,fontFamily:"'Space Mono',monospace",marginBottom:2}}>${stock.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
                     <div style={{color:heatTextColor(change),fontSize:16,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{up?"+":""}{change.toFixed(2)}%</div>
                     <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{stock.symbol}</div>
                   </div>
@@ -1324,7 +1329,7 @@ function HeatmapView({heatData, ndxData, tf}){
             {HEATMAP_TFS.map(t=>(
               <div key={t} style={{display:"flex",alignItems:"center",gap:4}}>
                 <div style={{width:8,height:8,borderRadius:1,background:TF_COLS[t]}}/>
-                <span style={{color:tf===t?"#e8f4f8":"#162535",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</span>
+                <span style={{color:tf===t?"#e8f4f8":"#5a7a95",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</span>
               </div>
             ))}
           </div>
@@ -1333,7 +1338,7 @@ function HeatmapView({heatData, ndxData, tf}){
           <BarChart data={drillSector ? drillChartData : summaryChartData} margin={{top:18,right:8,bottom:32,left:0}} barCategoryGap="20%">
             <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
             <XAxis dataKey="name" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} angle={-35} textAnchor="end" interval={0} height={40}/>
-            <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
+            <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
             <ReferenceLine y={0} stroke="#162535" strokeWidth={1}/>
             <Tooltip content={({active,payload,label})=>{
               if(!active||!payload?.length) return null;
@@ -1369,7 +1374,7 @@ function HeatmapView({heatData, ndxData, tf}){
             <BarChart data={drillChartData} margin={{top:18,right:8,bottom:36,left:0}} barCategoryGap="15%" barGap={2}>
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
               <XAxis dataKey="name" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} angle={-35} textAnchor="end" interval={0} height={44}/>
-              <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
+              <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
               <ReferenceLine y={0} stroke="#162535" strokeWidth={1}/>
               <Tooltip content={({active,payload,label})=>{
                 if(!active||!payload?.length) return null;
@@ -1440,11 +1445,11 @@ function WatchlistPanel({allData,watchlist,tf,onSelect,onRemove}){
           return(
             <button key={a.id} onClick={()=>onSelect(a.cat,a.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"none",border:"none",cursor:"pointer",padding:"7px 0",borderBottom:"1px solid #1a2535",width:"100%"}}>
               <div>
-                <span style={{color:"#2a4a65",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{a.label}</span>
-                <span style={{color:a.isLive?"#22c55e":"#162535",fontSize:8,marginLeft:6}}>{a.isLive?"●":"○"}</span>
+                <span style={{color:"#5a7a95",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{a.label}</span>
+                <span style={{color:a.isLive?"#22c55e":"#4a6a85",fontSize:8,marginLeft:6}}>{a.isLive?"●":"○"}</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:14}}>
-                <span style={{color:"#2a4a65",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{fmt(last,a.unit,a)}</span>
+                <span style={{color:"#5a7a95",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{fmt(last,a.unit,a)}</span>
                 <span style={{color:up?"#7dd3f0":"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",minWidth:56,textAlign:"right"}}>{up?"+":""}{p.toFixed(2)}%</span>
                 <button onClick={e=>{e.stopPropagation();onRemove(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#6890a8",fontSize:11,padding:0}}>✕</button>
               </div>
@@ -1631,7 +1636,7 @@ function NewsView({newsData, calData}) {
           <span style={{background:(TAG_COL[item.tag]||"#1e3045")+"22",color:TAG_COL[item.tag]||"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace",padding:"1px 6px",borderRadius:3,letterSpacing:1}}>{item.tag}</span>
           <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{item.source}</span>
           {item.isLive&&<span style={{color:"#22c55e",fontSize:7,marginLeft:2}}>● LIVE</span>}
-          <span style={{color:"#0f1f2e",fontSize:8,fontFamily:"'Space Mono',monospace",marginLeft:"auto"}}>{item.time}</span>
+          <span style={{color:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace",marginLeft:"auto"}}>{item.time}</span>
         </div>
         <div style={{color:isSel?"#e8f4f8":"#2a4a65",fontSize:11,fontFamily:"'Space Mono',monospace",lineHeight:1.5,transition:"color 0.12s"}}>
           {item.title}
@@ -1647,7 +1652,7 @@ function NewsView({newsData, calData}) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",gap:0,borderBottom:"1px solid #1a2535"}}>
           {[{key:"news",label:"◻ HEADLINES"},{key:"calendar",label:"⊞ ECO CALENDAR"},{key:"search",label:"⌕ SEARCH"}].map(t=>(
-            <button key={t.key} onClick={()=>setNewsTab(t.key)} style={{background:"none",border:"none",cursor:"pointer",color:newsTab===t.key?MAIN_COL:"#162535",fontSize:9,letterSpacing:1.5,padding:"6px 16px",borderBottom:`2px solid ${newsTab===t.key?MAIN_COL:"transparent"}`,marginBottom:-1,transition:"all 0.15s",fontFamily:"'Space Mono',monospace"}}>
+            <button key={t.key} onClick={()=>setNewsTab(t.key)} style={{background:"none",border:"none",cursor:"pointer",color:newsTab===t.key?MAIN_COL:"#5a7a95",fontSize:9,letterSpacing:1.5,padding:"6px 16px",borderBottom:`2px solid ${newsTab===t.key?MAIN_COL:"transparent"}`,marginBottom:-1,transition:"all 0.15s",fontFamily:"'Space Mono',monospace"}}>
               {t.label}
             </button>
           ))}
@@ -1655,7 +1660,7 @@ function NewsView({newsData, calData}) {
         {newsTab==="news" && (
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {NEWS_FILTERS.map(f=>(
-              <button key={f.key} onClick={()=>setFilter(f.key)} style={{background:filter===f.key?MAIN_COL+"20":"none",border:`1px solid ${filter===f.key?MAIN_COL:"#1a2535"}`,color:filter===f.key?MAIN_COL:"#162535",borderRadius:6,padding:"2px 9px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
+              <button key={f.key} onClick={()=>setFilter(f.key)} style={{background:filter===f.key?MAIN_COL+"20":"none",border:`1px solid ${filter===f.key?MAIN_COL:"#1a2535"}`,color:filter===f.key?MAIN_COL:"#5a7a95",borderRadius:6,padding:"2px 9px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
                 {f.label}
               </button>
             ))}
@@ -1714,7 +1719,7 @@ function NewsView({newsData, calData}) {
           {searchError && (
             <div style={{background:"#0d0a06",border:"1px solid #c8dff033",borderRadius:10,padding:"16px 18px",fontFamily:"'Space Mono',monospace"}}>
               <div style={{color:"#c8dff0",fontSize:10,marginBottom:8,letterSpacing:1}}>⚠ SEARCH NOTE</div>
-              <div style={{color:"#2a4a65",fontSize:10,lineHeight:1.8}}>{searchError}</div>
+              <div style={{color:"#5a7a95",fontSize:10,lineHeight:1.8}}>{searchError}</div>
               <div style={{color:"#6890a8",fontSize:9,marginTop:10,lineHeight:1.7}}>
                 The Claude.ai preview sandbox restricts some outbound API calls. Once you deploy this to Vercel, ticker search will work fully. In the meantime, the Headlines and Eco Calendar tabs use your Finnhub key normally.
               </div>
@@ -1809,7 +1814,7 @@ function ArticlePreview({item}) {
     <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"22px 24px",position:"sticky",top:0}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
         <span style={{background:(TAG_COL[item.tag]||"#1e3045")+"22",color:TAG_COL[item.tag]||"#2a4a65",fontSize:9,fontFamily:"'Space Mono',monospace",padding:"2px 8px",borderRadius:4,letterSpacing:1}}>{item.tag}</span>
-        <span style={{color:"#2a4a65",fontSize:9,fontFamily:"'Space Mono',monospace"}}>{item.source}</span>
+        <span style={{color:"#5a7a95",fontSize:9,fontFamily:"'Space Mono',monospace"}}>{item.source}</span>
         {item.isLive&&<span style={{color:"#22c55e",fontSize:8,fontFamily:"'Space Mono',monospace"}}>● LIVE</span>}
         <span style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",marginLeft:"auto"}}>{item.time}</span>
       </div>
@@ -1817,7 +1822,7 @@ function ArticlePreview({item}) {
         {item.title}
       </div>
       <div style={{width:40,height:1,background:MAIN_COL+"44",marginBottom:16}}/>
-      <div style={{color:"#2a4a65",fontSize:11,fontFamily:"'Space Mono',monospace",lineHeight:1.9}}>
+      <div style={{color:"#5a7a95",fontSize:11,fontFamily:"'Space Mono',monospace",lineHeight:1.9}}>
         {item.summary}
       </div>
       {item.url && item.url !== "#" && (
@@ -2221,7 +2226,7 @@ function FactorView({ factorData, liveQuotes, liveCandles }) {
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {/* Sub-view toggle */}
           {[{k:"overview",l:"OVERVIEW"},{k:"drilldown",l:"DRILLDOWN"},{k:"rotation",l:"ROTATION"}].map(({k,l})=>(
-            <button key={k} onClick={()=>setSubview(k)} style={{background:subview===k?MAIN_COL+"20":"none",border:`1px solid ${subview===k?MAIN_COL:"#1a2535"}`,color:subview===k?MAIN_COL:"#162535",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>{l}</button>
+            <button key={k} onClick={()=>setSubview(k)} style={{background:subview===k?MAIN_COL+"20":"none",border:`1px solid ${subview===k?MAIN_COL:"#1a2535"}`,color:subview===k?MAIN_COL:"#5a7a95",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>{l}</button>
           ))}
           <TfBar value={tf} onChange={setTf} options={FACTOR_TFS}/>
         </div>
@@ -2276,7 +2281,7 @@ function FactorView({ factorData, liveQuotes, liveCandles }) {
               <LineChart margin={{top:8,right:12,bottom:0,left:4}}>
                 <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                 <XAxis dataKey="t" hide/>
-                <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
+                <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
                 <ReferenceLine y={0} stroke="#162535" strokeDasharray="2 2"/>
                 <Tooltip content={({active,payload})=>{
                   if(!active||!payload?.length) return null;
@@ -2392,7 +2397,7 @@ function FactorView({ factorData, liveQuotes, liveCandles }) {
                       <circle cx={cx} cy={cy} r="2.5" fill={col}/>
                       <text x={cx} y={68} textAnchor="middle" fill="#e8f4f8" fontSize="9" fontFamily="'Space Mono',monospace" fontWeight="700">{m.fmt(val)}</text>
                     </svg>
-                    <div style={{color:"#2a4a65",fontSize:9,fontFamily:"'Space Mono',monospace",marginTop:-2,maxWidth:90,lineHeight:1.3}}>{m.label}</div>
+                    <div style={{color:"#5a7a95",fontSize:9,fontFamily:"'Space Mono',monospace",marginTop:-2,maxWidth:90,lineHeight:1.3}}>{m.label}</div>
                   </div>
                 );
               })}
@@ -2413,7 +2418,7 @@ function FactorView({ factorData, liveQuotes, liveCandles }) {
                   </defs>
                   <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                   <XAxis dataKey="t" hide/>
-                  <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
+                  <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
                   <ReferenceLine y={0} stroke="#162535" strokeDasharray="2 2"/>
                   <Tooltip formatter={v=>[`${v>0?"+":""}${v.toFixed(2)}%`,"Rel. Perf."]}/>
                   <Area type="monotone" dataKey="rel" stroke={selFactor.color} strokeWidth={2} fill="url(#facrel)" dot={false}/>
@@ -2426,7 +2431,7 @@ function FactorView({ factorData, liveQuotes, liveCandles }) {
                 <LineChart data={selSeries} margin={{top:4,right:4,bottom:0,left:0}}>
                   <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                   <XAxis dataKey="t" hide/>
-                  <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36}/>
+                  <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36}/>
                   <Tooltip content={({active,payload})=>{
                     if(!active||!payload?.length) return null;
                     return(
@@ -2868,10 +2873,10 @@ function ScreenerView() {
             </div>
           )}
           <button onClick={()=>setShowPassing(v=>!v)}
-            style={{background:showPassing?"#7dd3f020":"none",border:`1px solid ${showPassing?"#7dd3f0":"#1a2535"}`,color:showPassing?"#7dd3f0":"#162535",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:8,letterSpacing:1}}>
+            style={{background:showPassing?"#7dd3f020":"none",border:`1px solid ${showPassing?"#7dd3f0":"#1a2535"}`,color:showPassing?"#7dd3f0":"#5a7a95",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:8,letterSpacing:1}}>
             {showPassing ? "⌗ FILTER ON" : "⌗ FILTER OFF"}
           </button>
-          <span style={{color:"#2a4a65",fontSize:10}}>|</span>
+          <span style={{color:"#5a7a95",fontSize:10}}>|</span>
           <span style={{color:sorted.length>0?"#7dd3f0":"#ff5f6d",fontSize:10,fontWeight:700}}>{sorted.length}</span>
           <span style={{color:"#6890a8",fontSize:8}}>{showPassing?"PASSING":"TOTAL"}</span>
         </div>
@@ -2930,7 +2935,7 @@ function ScreenerView() {
               <div style={{display:"flex",gap:4}}>
                 {["All","Stock","ETF"].map(t=>(
                   <button key={t} onClick={()=>setTypeFilter(t)}
-                    style={{background:typeFilter===t?"#7dd3f020":"none",border:`1px solid ${typeFilter===t?"#7dd3f0":"#1a2535"}`,color:typeFilter===t?"#7dd3f0":"#162535",borderRadius:5,padding:"2px 10px",cursor:"pointer",fontSize:8}}>
+                    style={{background:typeFilter===t?"#7dd3f020":"none",border:`1px solid ${typeFilter===t?"#7dd3f0":"#1a2535"}`,color:typeFilter===t?"#7dd3f0":"#5a7a95",borderRadius:5,padding:"2px 10px",cursor:"pointer",fontSize:8}}>
                     {t}
                   </button>
                 ))}
@@ -3001,7 +3006,7 @@ function ScreenerView() {
                       onMouseLeave={e=>e.currentTarget.style.background=rowBg}>
                       <td style={{padding:"9px 10px",borderBottom:"1px solid #1a253555"}}>
                         <div style={{color:"#e8f4f8",fontSize:11,fontWeight:700,letterSpacing:0.5}}>{s.symbol}</div>
-                        <div style={{color:"#2a4a65",fontSize:7,marginTop:1,maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                        <div style={{color:"#5a7a95",fontSize:7,marginTop:1,maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
                       </td>
                       <td style={{padding:"9px 10px",borderBottom:"1px solid #1a253555"}}>
                         <span style={{background:s.type==="ETF"?"#b8e8ff22":"#c8dff022",color:s.type==="ETF"?"#b8e8ff":"#c8dff0",fontSize:7,padding:"1px 5px",borderRadius:3,letterSpacing:1}}>{s.type}</span>
@@ -3084,7 +3089,7 @@ function ScreenerView() {
             <LineChart data={selData.closes.slice(-30).map((c,i)=>({i,price:c,ema21:calcEMA(selData.closes,21)[selData.closes.length-30+i]}))} margin={{top:4,right:4,bottom:0,left:0}}>
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
               <XAxis dataKey="i" hide/>
-              <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={40} domain={["auto","auto"]}/>
+              <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={40} domain={["auto","auto"]}/>
               <Tooltip content={({active,payload})=>{
                 if(!active||!payload?.length) return null;
                 return(
@@ -3314,7 +3319,7 @@ function RSCard({ item, benchmark, rank, liveRS, liveChg, etfSym, isLive }) {
           <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
             <span style={{color:strengthCol,fontSize:7,fontWeight:700,letterSpacing:1,background:strengthCol+"18",padding:"1px 5px",borderRadius:3}}>{strength}</span>
             <span style={{color:"#6890a8",fontSize:7}}>RS: {rsAvg}</span>
-            {etfSym && <span style={{color:"#2a4a65",fontSize:7}}>{etfSym}</span>}
+            {etfSym && <span style={{color:"#5a7a95",fontSize:7}}>{etfSym}</span>}
             {isLive && liveChg != null && (
               <span style={{color:chgUp?"#7dd3f0":"#ff5f6d",fontSize:7}}>{chgUp?"+":""}{liveChg.toFixed(2)}%</span>
             )}
@@ -3467,7 +3472,7 @@ function ThemesRSView({ liveQuotes, liveCandles }) {
         <div style={{display:"flex",gap:0,background:"#0d1420",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
           {SUBVIEWS.map(({k,l})=>(
             <button key={k} onClick={()=>setSubview(k)}
-              style={{background:subview===k?"#7dd3f020":"none",border:"none",borderRight:"1px solid #1a2535",color:subview===k?"#b8e8ff":"#162535",padding:"6px 16px",cursor:"pointer",fontSize:9,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
+              style={{background:subview===k?"#7dd3f020":"none",border:"none",borderRight:"1px solid #1a2535",color:subview===k?"#b8e8ff":"#5a7a95",padding:"6px 16px",cursor:"pointer",fontSize:9,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
               {l}
             </button>
           ))}
@@ -3939,7 +3944,7 @@ function FundamentalsView() {
                     margin={{top:28,right:8,bottom:0,left:0}}>
                     <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                     <XAxis dataKey="year" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                    <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}B`}/>
+                    <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}B`}/>
                     <Tooltip content={({active,payload})=>{
                       if(!active||!payload?.length) return null;
                       const row=payload[0]?.payload;
@@ -3986,7 +3991,7 @@ function FundamentalsView() {
                     margin={{top:28,right:8,bottom:0,left:0}}>
                     <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                     <XAxis dataKey="q" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                    <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}`}/>
+                    <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}`}/>
                     <Tooltip content={({active,payload})=>{
                       if(!active||!payload?.length) return null;
                       const row=payload[0]?.payload;
@@ -4050,7 +4055,7 @@ function FundamentalsView() {
                   ]} margin={{top:16,right:8,bottom:0,left:0}} barGap={4}>
                     <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                     <XAxis dataKey="metric" tick={{fill:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                    <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={30}/>
+                    <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={30}/>
                     <Tooltip content={({active,payload,label})=>{
                       if(!active||!payload?.length) return null;
                       return(
@@ -4104,7 +4109,7 @@ function FundamentalsView() {
                   ]} margin={{top:16,right:8,bottom:0,left:0}} barGap={4}>
                     <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                     <XAxis dataKey="metric" tick={{fill:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                    <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}%`}/>
+                    <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}%`}/>
                     <Tooltip/>
                     <Bar dataKey="company"  fill="#7dd3f099" stroke="#7dd3f0" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50}/>
                     <Bar dataKey="industry" fill="#1e304588" stroke="#162535" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50}/>
@@ -4131,7 +4136,7 @@ function FundamentalsView() {
                   <BarChart data={d.revYears.map((v,i)=>({year:`FY${new Date().getFullYear()-3+i}`,rev:v,growth:i>0?+((v/d.revYears[i-1]-1)*100).toFixed(1):null}))} margin={{top:16,right:8,bottom:0,left:0}}>
                     <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                     <XAxis dataKey="year" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                    <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}B`}/>
+                    <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}B`}/>
                     <Tooltip content={({active,payload,label})=>{
                       if(!active||!payload?.length) return null;
                       const g=payload[0]?.payload?.growth;
@@ -4152,7 +4157,7 @@ function FundamentalsView() {
                   <BarChart data={d.epsQtrs.map((v,i)=>({q:`Q${(i%4)+1}'${String(new Date().getFullYear()-Math.floor((7-i)/4)).slice(-2)}`,eps:v,beat:v > d.epsQtrs[Math.max(0,i-1)]}))} margin={{top:16,right:8,bottom:0,left:0}}>
                     <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                     <XAxis dataKey="q" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                    <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}`}/>
+                    <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}`}/>
                     <Tooltip content={({active,payload})=>{
                       if(!active||!payload?.length) return null;
                       return <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"6px 10px",fontFamily:"'Space Mono',monospace",fontSize:9,color:"#c8dff0"}}>${payload[0].value} EPS</div>;
@@ -4190,7 +4195,7 @@ function FundamentalsView() {
                 <ResponsiveContainer width="100%" height={120}>
                   <BarChart data={[{name:"Cash",val:d.totalCash,col:"#7dd3f0"},{name:"Debt",val:d.totalDebt,col:"#ff5f6d"},{name:"FCF",val:d.freeCashFlow,col:"#c8dff0"}]} layout="vertical" margin={{top:4,right:40,bottom:4,left:50}}>
                     <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" horizontal={false}/>
-                    <XAxis type="number" tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} tickFormatter={v=>`$${v}B`}/>
+                    <XAxis type="number" tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} tickFormatter={v=>`$${v}B`}/>
                     <YAxis type="category" dataKey="name" tick={{fill:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={44}/>
                     <Tooltip content={({active,payload})=>{
                       if(!active||!payload?.length) return null;
@@ -4438,7 +4443,7 @@ function IndustriesView({ liveQuotes }) {
           {/* Sort */}
           <div style={{display:"flex",gap:3}}>
             {[{k:"change",l:"% CHANGE"},{k:"sector",l:"SECTOR"},{k:"alpha",l:"A–Z"}].map(({k,l})=>(
-              <button key={k} onClick={()=>setSortBy(k)} style={{background:sortBy===k?"#7dd3f020":"none",border:`1px solid ${sortBy===k?"#7dd3f0":"#1a2535"}`,color:sortBy===k?"#7dd3f0":"#162535",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:7,letterSpacing:1}}>{l}</button>
+              <button key={k} onClick={()=>setSortBy(k)} style={{background:sortBy===k?"#7dd3f020":"none",border:`1px solid ${sortBy===k?"#7dd3f0":"#1a2535"}`,color:sortBy===k?"#7dd3f0":"#5a7a95",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:7,letterSpacing:1}}>{l}</button>
             ))}
           </div>
           {/* TF */}
@@ -4547,7 +4552,7 @@ function IndustriesView({ liveQuotes }) {
               <BarChart data={["1D","1W","1M","1Y"].map(t=>({t,v:sel.changes[t]}))} margin={{top:4,right:4,bottom:0,left:0}}>
                 <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                 <XAxis dataKey="t" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(0)}%`}/>
+                <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(0)}%`}/>
                 <ReferenceLine y={0} stroke="#162535" strokeWidth={1}/>
                 <Bar dataKey="v" maxBarSize={40} radius={[3,3,0,0]}
                   label={{position:"top",fontSize:8,fontFamily:"'Space Mono',monospace",formatter:v=>`${v>0?"+":""}${v.toFixed(1)}%`,fill:"#2a4a65"}}
@@ -5667,7 +5672,7 @@ export default function MarketDashboard(){
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
             <button onClick={load} style={{background:"none",border:"1px solid #1a2535",color:"#6890a8",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:9}}>↺</button>
             {NAV_TABS.map(t=>(
-              <button key={t.key} onClick={()=>setView(t.key)} style={{background:view===t.key?"#152030":"none",border:`1px solid ${view===t.key?C_MAIN_COL:"#1a2535"}`,color:view===t.key?C_MAIN_COL:"#162535",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>
+              <button key={t.key} onClick={()=>setView(t.key)} style={{background:view===t.key?"#152030":"none",border:`1px solid ${view===t.key?C_MAIN_COL:"#1a2535"}`,color:view===t.key?C_MAIN_COL:"#5a7a95",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>
                 {t.icon} {t.key==="watchlist"?`${t.label}${watchlist.size?` (${watchlist.size})`:""}`:t.label.toUpperCase()}
               </button>
             ))}
