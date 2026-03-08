@@ -1230,7 +1230,7 @@ function DetailChart({asset,tf}){
         <div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
             <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:2}}>{asset.sector?.toUpperCase()} · {asset.label}</div>
-            <div style={{fontSize:9,fontFamily:"'Space Mono',monospace",color:asset.isLive?"#22c55e":"#1e3045",background:asset.isLive?"#22c55e12":"#1e304512",padding:"1px 6px",borderRadius:3}}>{asset.isLive?"● LIVE":"○ SIMULATED"}</div>
+            <div style={{fontSize:9,fontFamily:"'Space Mono',monospace",color:asset.isLive?"#22c55e":"#4a6a85",background:asset.isLive?"#22c55e12":"#1e304512",padding:"1px 6px",borderRadius:3}}>{asset.isLive?"● LIVE":"○ SIMULATED"}</div>
           </div>
           <div style={{color:"#f1f5f9",fontSize:24,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:-1}}>{fmt(last,asset.unit,asset)}</div>
         </div>
@@ -1428,7 +1428,7 @@ function HeatmapView({heatData, ndxData, tf}){
             <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
             <XAxis dataKey="name" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} angle={-35} textAnchor="end" interval={0} height={40}/>
             <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
-            <ReferenceLine y={0} stroke="#162535" strokeWidth={1}/>
+            <ReferenceLine y={0} stroke="#8aacbe" strokeWidth={1}/>
             <Tooltip content={({active,payload,label})=>{
               if(!active||!payload?.length) return null;
               const item = (drillSector?drillChartData:summaryChartData).find(d=>d.name===label);
@@ -1464,7 +1464,7 @@ function HeatmapView({heatData, ndxData, tf}){
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
               <XAxis dataKey="name" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} angle={-35} textAnchor="end" interval={0} height={44}/>
               <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
-              <ReferenceLine y={0} stroke="#162535" strokeWidth={1}/>
+              <ReferenceLine y={0} stroke="#8aacbe" strokeWidth={1}/>
               <Tooltip content={({active,payload,label})=>{
                 if(!active||!payload?.length) return null;
                 const item = drillChartData.find(d=>d.name===label);
@@ -1748,7 +1748,7 @@ function NewsView({newsData, calData}) {
               ? <span style={{color:"#c8dff0",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>◌ LOADING LIVE NEWS...</span>
               : liveHeadlines
               ? <span style={{color:"#7dd3f0",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>● LIVE · YAHOO FINANCE · {liveHeadlines.length} STORIES</span>
-              : <span style={{color:"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>○ SIMULATED</span>
+              : <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>○ SIMULATED</span>
             }
           </div>
           <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:12,alignItems:"start"}}>
@@ -1783,7 +1783,7 @@ function NewsView({newsData, calData}) {
                   <div style={{width:6,height:6,borderRadius:"50%",background:impactCol,flexShrink:0}}/>
                   <div style={{color:hasActual?"#a8b8c8":"#2a4a65",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.title}</div>
                 </div>
-                <div style={{color:hasActual?MAIN_COL:"#162535",fontSize:10,fontFamily:"'Space Mono',monospace",fontWeight:hasActual?"700":"400"}}>{ev.actual}</div>
+                <div style={{color:hasActual?MAIN_COL:"#8aacbe",fontSize:10,fontFamily:"'Space Mono',monospace",fontWeight:hasActual?"700":"400"}}>{ev.actual}</div>
                 <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.forecast}</div>
                 <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{ev.prior}</div>
               </div>
@@ -2304,7 +2304,7 @@ function FactorView({ factorData, liveQuotes, liveCandles, thematicLoading }) {
                 <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                 <XAxis dataKey="t" hide/>
                 <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
-                <ReferenceLine y={0} stroke="#162535" strokeDasharray="2 2"/>
+                <ReferenceLine y={0} stroke="#8aacbe" strokeDasharray="2 2"/>
                 <Tooltip content={({active,payload})=>{
                   if(!active||!payload?.length) return null;
                   return(
@@ -2329,7 +2329,7 @@ function FactorView({ factorData, liveQuotes, liveCandles, thematicLoading }) {
               {FACTORS.map(f=>(
                 <button key={f.id} onClick={()=>setActiveF(f.id)} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",cursor:"pointer",padding:0}}>
                   <div style={{width:16,height:2,background:f.color,borderRadius:1,opacity:activeF===f.id?1:0.4}}/>
-                  <span style={{color:activeF===f.id?f.color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",transition:"color 0.15s"}}>{f.label}</span>
+                  <span style={{color:activeF===f.id?f.color:"#a8c4d4",fontSize:8,fontFamily:"'Space Mono',monospace",transition:"color 0.15s"}}>{f.label}</span>
                 </button>
               ))}
             </div>
@@ -2375,7 +2375,7 @@ function FactorView({ factorData, liveQuotes, liveCandles, thematicLoading }) {
           {/* Factor selector */}
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {FACTORS.map(f=>(
-              <button key={f.id} onClick={()=>setActiveF(f.id)} style={{background:activeF===f.id?f.color+"22":"none",border:`1px solid ${activeF===f.id?f.color:"#1a2535"}`,color:activeF===f.id?f.color:"#6890a8",borderRadius:8,padding:"4px 14px",cursor:"pointer",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>
+              <button key={f.id} onClick={()=>setActiveF(f.id)} style={{background:activeF===f.id?f.color+"22":"none",border:`1px solid ${activeF===f.id?f.color:"#1a2535"}`,color:activeF===f.id?f.color:"#a8c4d4",borderRadius:8,padding:"4px 14px",cursor:"pointer",fontSize:9,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>
                 {f.label}
               </button>
             ))}
@@ -2441,7 +2441,7 @@ function FactorView({ factorData, liveQuotes, liveCandles, thematicLoading }) {
                   <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                   <XAxis dataKey="t" hide/>
                   <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(1)}%`}/>
-                  <ReferenceLine y={0} stroke="#162535" strokeDasharray="2 2"/>
+                  <ReferenceLine y={0} stroke="#8aacbe" strokeDasharray="2 2"/>
                   <Tooltip formatter={v=>[`${v>0?"+":""}${v.toFixed(2)}%`,"Rel. Perf."]}/>
                   <Area type="monotone" dataKey="rel" stroke={selFactor.color} strokeWidth={2} fill="url(#facrel)" dot={false}/>
                 </AreaChart>
@@ -2840,7 +2840,7 @@ function ScreenerView() {
   const Th = ({col, label, title}) => (
     <th onClick={() => handleSort(col)} title={title}
       style={{padding:"8px 10px",textAlign:"left",cursor:"pointer",userSelect:"none",whiteSpace:"nowrap",
-        color: sortCol===col ? "#7dd3f0" : "#162535",
+        color: sortCol===col ? "#7dd3f0" : "#8aacbe",
         fontSize:8, fontFamily:"'Space Mono',monospace", letterSpacing:1,
         borderBottom:"1px solid #1a2535", background:"#0a0e14",
         position:"sticky", top:0, zIndex:1,
@@ -3290,7 +3290,7 @@ function PerfBars({ perf }) {
                 right:!up?"50%":undefined,
               }}/>
               {/* zero line */}
-              <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:"#162535"}}/>
+              <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:"#8aacbe"}}/>
             </div>
             <span style={{color:up?"#7dd3f0":"#c8dff0",fontSize:7,fontFamily:"'Space Mono',monospace",width:38,flexShrink:0,textAlign:"right",fontWeight:700}}>
               {up?"+":""}{v.toFixed(1)}%
@@ -3407,12 +3407,12 @@ function RSControls({ sort, setSort, benchmark, setBenchmark, search, setSearch 
       </div>
       <div style={{display:"flex",gap:3}}>
         {[{k:"rank",l:"RANK"},{k:"rs",l:"RS SCORE"},{k:"alpha",l:"A–Z"}].map(({k,l})=>(
-          <button key={k} onClick={()=>setSort(k)} style={{background:sort===k?"#7dd3f020":"none",border:`1px solid ${sort===k?"#7dd3f0":"#1a2535"}`,color:sort===k?"#7dd3f0":"#162535",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:7,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{l}</button>
+          <button key={k} onClick={()=>setSort(k)} style={{background:sort===k?"#7dd3f020":"none",border:`1px solid ${sort===k?"#7dd3f0":"#1a2535"}`,color:sort===k?"#7dd3f0":"#8aacbe",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:7,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{l}</button>
         ))}
       </div>
       <div style={{display:"flex",gap:3}}>
         {[{k:"spx",l:"vs S&P 500"},{k:"ndx",l:"vs NASDAQ"}].map(({k,l})=>(
-          <button key={k} onClick={()=>setBenchmark(k)} style={{background:benchmark===k?"#e879f920":"none",border:`1px solid ${benchmark===k?"#c8dff0":"#1a2535"}`,color:benchmark===k?"#c8dff0":"#162535",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:7,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{l}</button>
+          <button key={k} onClick={()=>setBenchmark(k)} style={{background:benchmark===k?"#e879f920":"none",border:`1px solid ${benchmark===k?"#c8dff0":"#1a2535"}`,color:benchmark===k?"#c8dff0":"#8aacbe",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:7,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{l}</button>
         ))}
       </div>
     </div>
@@ -3876,7 +3876,7 @@ function FundamentalsView() {
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
           {POPULAR_TICKERS.map(t=>(
             <button key={t} onClick={()=>{setInput(t);search(t);}}
-              style={{background:symbol===t?"#7dd3f020":"none",border:`1px solid ${symbol===t?"#7dd3f0":"#1a2535"}`,color:symbol===t?"#7dd3f0":"#162535",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,letterSpacing:0.5,transition:"all 0.12s"}}>
+              style={{background:symbol===t?"#7dd3f020":"none",border:`1px solid ${symbol===t?"#7dd3f0":"#1a2535"}`,color:symbol===t?"#7dd3f0":"#8aacbe",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,letterSpacing:0.5,transition:"all 0.12s"}}>
               {t}
             </button>
           ))}
@@ -3927,7 +3927,7 @@ function FundamentalsView() {
           <div style={{display:"flex",gap:0,borderBottom:"1px solid #1a2535"}}>
             {SUBTABS.map(({k,l})=>(
               <button key={k} onClick={()=>setActiveTab(k)}
-                style={{background:"none",border:"none",cursor:"pointer",color:activeTab===k?"#7dd3f0":"#162535",fontSize:8,letterSpacing:1,padding:"7px 14px",borderBottom:`2px solid ${activeTab===k?"#7dd3f0":"transparent"}`,marginBottom:-1,transition:"all 0.15s",fontFamily:"'Space Mono',monospace"}}>
+                style={{background:"none",border:"none",cursor:"pointer",color:activeTab===k?"#7dd3f0":"#8aacbe",fontSize:8,letterSpacing:1,padding:"7px 14px",borderBottom:`2px solid ${activeTab===k?"#7dd3f0":"transparent"}`,marginBottom:-1,transition:"all 0.15s",fontFamily:"'Space Mono',monospace"}}>
                 {l}
               </button>
             ))}
@@ -4166,7 +4166,7 @@ function FundamentalsView() {
                       );
                     }}/>
                     <Bar dataKey="company"  fill="#c8dff099" stroke="#c8dff0" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50} name={symbol}/>
-                    <Bar dataKey="industry" fill="#1e304588" stroke="#162535" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50} name="Industry"/>
+                    <Bar dataKey="industry" fill="#1e304588" stroke="#8aacbe" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50} name="Industry"/>
                   </BarChart>
                 </ResponsiveContainer>
                 <div style={{display:"flex",gap:12,marginTop:6,justifyContent:"center"}}>
@@ -4211,7 +4211,7 @@ function FundamentalsView() {
                     <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={30} tickFormatter={v=>`${v}%`}/>
                     <Tooltip/>
                     <Bar dataKey="company"  fill="#7dd3f099" stroke="#7dd3f0" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50}/>
-                    <Bar dataKey="industry" fill="#1e304588" stroke="#162535" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50}/>
+                    <Bar dataKey="industry" fill="#1e304588" stroke="#8aacbe" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={50}/>
                   </BarChart>
                 </ResponsiveContainer>
               </FundSection>
@@ -4555,7 +4555,7 @@ function IndustriesView({ liveQuotes, thematicLoading }) {
           {/* TF */}
           <div style={{display:"flex",gap:3}}>
             {["1D","1W","1M","1Y"].map(t=>(
-              <button key={t} onClick={()=>setTf(t)} style={{background:tf===t?"#7dd3f020":"none",border:`1px solid ${tf===t?"#7dd3f0":"#1a2535"}`,color:tf===t?"#7dd3f0":"#162535",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,letterSpacing:1}}>{t}</button>
+              <button key={t} onClick={()=>setTf(t)} style={{background:tf===t?"#7dd3f020":"none",border:`1px solid ${tf===t?"#7dd3f0":"#1a2535"}`,color:tf===t?"#7dd3f0":"#8aacbe",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,letterSpacing:1}}>{t}</button>
             ))}
           </div>
         </div>
@@ -4581,7 +4581,7 @@ function IndustriesView({ liveQuotes, thematicLoading }) {
           const secInd = INDUSTRIES.find(i=>i.sector===s);
           const secCol = secInd?.sectorColor || "#7dd3f0";
           return(
-            <button key={s} onClick={()=>setFilterSec(s)} style={{background:filterSec===s?(secCol+"22"):"none",border:`1px solid ${filterSec===s?secCol:"#1a2535"}`,color:filterSec===s?secCol:"#162535",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:0.5,transition:"all 0.15s"}}>
+            <button key={s} onClick={()=>setFilterSec(s)} style={{background:filterSec===s?(secCol+"22"):"none",border:`1px solid ${filterSec===s?secCol:"#1a2535"}`,color:filterSec===s?secCol:"#8aacbe",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:0.5,transition:"all 0.15s"}}>
               {s}
             </button>
           );
@@ -4659,7 +4659,7 @@ function IndustriesView({ liveQuotes, thematicLoading }) {
                 <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
                 <XAxis dataKey="t" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
                 <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`${v>0?"+":""}${v.toFixed(0)}%`}/>
-                <ReferenceLine y={0} stroke="#162535" strokeWidth={1}/>
+                <ReferenceLine y={0} stroke="#8aacbe" strokeWidth={1}/>
                 <Bar dataKey="v" maxBarSize={40} radius={[3,3,0,0]}
                   label={{position:"top",fontSize:8,fontFamily:"'Space Mono',monospace",formatter:v=>`${v>0?"+":""}${v.toFixed(1)}%`,fill:"#2a4a65"}}
                   shape={(props)=>{
@@ -5034,6 +5034,21 @@ function CorrView({ allData }) {
   );
 }
 
+const ECO_EVENTS = [
+  {title:"Unemployment Rate",        country:"US", impact:"high",   fred:"UNRATE",          desc:"Monthly US unemployment rate"},
+  {title:"CPI YoY",                  country:"US", impact:"high",   fred:"CPIAUCSL",        desc:"Consumer Price Index year-over-year"},
+  {title:"Fed Funds Rate",           country:"US", impact:"high",   fred:"FEDFUNDS",        desc:"Federal funds effective rate"},
+  {title:"GDP Growth Rate",          country:"US", impact:"high",   fred:"A191RL1Q225SBEA", desc:"Real GDP % change QoQ"},
+  {title:"Core PCE",                 country:"US", impact:"high",   fred:"PCEPILFE",        desc:"Core personal consumption expenditures"},
+  {title:"Retail Sales MoM",         country:"US", impact:"medium", fred:"RSXFS",           desc:"Advance retail sales month-over-month"},
+  {title:"10Y Treasury Yield",       country:"US", impact:"medium", fred:"DGS10",           desc:"10-year treasury constant maturity rate"},
+  {title:"Initial Jobless Claims",   country:"US", impact:"medium", fred:"ICSA",            desc:"Weekly initial unemployment insurance claims"},
+  {title:"Housing Starts",           country:"US", impact:"low",    fred:"HOUST",           desc:"New privately-owned housing units started"},
+  {title:"Nonfarm Payrolls",         country:"US", impact:"high",   fred:"PAYEMS",          desc:"Total nonfarm payroll employees"},
+  {title:"M2 Money Supply",          country:"US", impact:"low",    fred:"M2SL",            desc:"M2 money stock (billions)"},
+  {title:"30Y Mortgage Rate",        country:"US", impact:"medium", fred:"MORTGAGE30US",    desc:"30-year fixed rate mortgage average"},
+];
+
 const IMPACT_COL = {high:"#ff5f6d", medium:"#f59e0b", low:"#7dd3f0"};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5042,100 +5057,197 @@ const IMPACT_COL = {high:"#ff5f6d", medium:"#f59e0b", low:"#7dd3f0"};
 
 // Major tickers to show earnings for — spans multiple sectors
 const EARNINGS_WATCHLIST = [
-  // Mega-cap tech
-  "AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","ORCL","ADBE","CRM","INTC","AMD",
-  // Financials
-  "JPM","BAC","GS","MS","V","MA","BLK","SCHW",
-  // Healthcare
-  "UNH","JNJ","LLY","ABBV","MRK","PFE","GILD","AMGN",
-  // Consumer / retail
-  "WMT","COST","TGT","MCD","NKE","SBUX","HD",
-  // Energy
-  "XOM","CVX","COP","SLB",
-  // Industrials
-  "GE","CAT","HON","BA","UPS","FDX",
-  // Other
-  "NFLX","DIS","PYPL","UBER","SPOT","SNOW","PLTR",
+  "AAPL","MSFT","NVDA","GOOGL","GOOG","META","AMZN","TSLA","ORCL","ADBE","CRM","INTC","AMD","QCOM",
+  "TXN","AVGO","MU","AMAT","LRCX","KLAC","MRVL","SNPS","CDNS","ANSS","NOW","WDAY","TEAM","ZM",
+  "DDOG","OKTA","CRWD","PANW","FTNT","ZS","NET","SNOW","PLTR","UBER","LYFT","DASH","ABNB","RBLX",
+  "U","COIN","HOOD","SOFI","IBM","HPQ","HPE","DELL","NTAP","PSTG","WDC","STX","ANET","CSCO",
+  "JNPR","INTU","ADSK","CTSH","ACN","GLOB","EPAM","MSTR","JPM","BAC","WFC","C","GS","MS",
+  "USB","TFC","PNC","COF","AXP","DFS","V","MA","PYPL","SQ","FIS","FISV","GPN","WEX",
+  "BLK","SCHW","AMTD","ETSY","ICE","CME","NDAQ","CBOE","MCO","SPGI","MET","PRU","AFL","ALL",
+  "PGR","TRV","CB","AIG","HIG","LNC","BX","KKR","APO","CG","ARES","BAM","BN","UNH",
+  "CVS","CI","HUM","ELV","CNC","MOH","JNJ","LLY","ABBV","MRK","PFE","BMY","AZN","NVO",
+  "SNY","GILD","AMGN","REGN","VRTX","BIIB","MRNA","BNTX","TMO","DHR","A","BIO","IQV","VEEV",
+  "IDXX","MTD","WAT","SYK","BSX","MDT","ABT","BAX","BDX","EW","ISRG","ZBH","RMD","HCA",
+  "THC","UHS","ENSG","HD","LOW","TJX","ROST","BURL","ULTA","WMT","COST","TGT","DG","DLTR",
+  "KR","SFM","MCD","CMG","YUM","QSR","DPZ","SBUX","DRI","TXRH","NKE","LULU","PVH","RL",
+  "VFC","TPR","CPRI","SKX","F","GM","RIVN","LCID","STLA","MAR","HLT","IHG","H","MGM",
+  "LVS","WYNN","CZR","BKNG","EXPE","TRIP","PCLN","EBAY","W","CVNA","KMX","AN","PAG","PG",
+  "KO","PEP","MDLZ","KHC","GIS","K","CPB","SJM","CAG","MKC","PM","MO","BTI","MNST",
+  "KDP","STZ","BUD","TAP","SAM","CL","CHD","EL","COTY","REV","XOM","CVX","COP","EOG",
+  "PXD","DVN","FANG","MPC","VLO","PSX","OXY","HES","APA","CTRA","MRO","SLB","HAL","BKR",
+  "NOV","FTI","KMI","WMB","OKE","EPD","ET","MPLX","PAA","NEE","AEE","PNW","NI","BEP",
+  "CWEN","GE","CAT","HON","MMM","EMR","ETN","PH","ROK","AME","DOV","XYL","BA","LMT",
+  "RTX","NOC","GD","HII","L3H","TDG","HWM","SPR","UPS","FDX","DAL","UAL","AAL","LUV",
+  "JBLU","ALK","CHRW","EXPD","XPO","SAIA","DE","AGCO","CNH","PCAR","CMI","ALSN","WM","RSG",
+  "CLH","CWST","GWW","FAST","MSC","SNA","SWK","GNRC","NFLX","DIS","PARA","WBD","FOXA","FOX",
+  "NYT","NWSA","SPOT","SIRI","IHRT","AUDI","T","VZ","TMUS","LUMN","FYBR","CCOI","CHTR","CMCSA",
+  "CABO","LBRDK","LBRDA","SNAP","PINS","RDDT","MTCH","IAC","LIN","APD","SHW","PPG","ECL","EMN",
+  "CE","AVNT","HUN","NEM","GOLD","AEM","WPM","FNV","RGLD","HL","PAAS","AG","FCX","TECK",
+  "AA","CENX","NUE","STLD","CLF","RS","CMC","MTUS","BHP","RIO","VALE","SCCO","ACH","MLM",
+  "VMC","CRH","EXP","SUM","MOS","NTR","CF","FMC","AMT","CCI","SBAC","EQIX","DLR","IRM",
+  "CONE","PLD","EGP","FR","REXR","STAG","SPG","O","NNN","ADC","EPRT","NTST","EQR","AVB",
+  "ESS","MAA","UDR","CPT","VTR","WELL","PEAK","OHI","NHI","SBRA","ARE","BXP","SLG","VNO",
+  "KRC","CUZ","PSA","EXR","CUBE","LSI","NSA","PEG","AMH","INVH","SFR","DUK","SO","D",
+  "AEP","EXC","XEL","PCG","ED","AWK","WEC","CMS","DTE","PPL","AES","EVRG","OGE","POR",
+  "SRE","EIX","ETR","FE","CNP","NWE","SPWR","MARA","RIOT","CLSK","HUT","BTBT","BTDR","WULF",
+  "UPST","AFRM","LC","OPEN","OFLO",
 ];
 
 const SECTOR_MAP = {
-  AAPL:"Tech",MSFT:"Tech",NVDA:"Tech",GOOGL:"Tech",META:"Tech",AMZN:"Tech",TSLA:"Tech",
-  ORCL:"Tech",ADBE:"Tech",CRM:"Tech",INTC:"Tech",AMD:"Tech",
-  JPM:"Finance",BAC:"Finance",GS:"Finance",MS:"Finance",V:"Finance",MA:"Finance",BLK:"Finance",SCHW:"Finance",
-  UNH:"Health",JNJ:"Health",LLY:"Health",ABBV:"Health",MRK:"Health",PFE:"Health",GILD:"Health",AMGN:"Health",
-  WMT:"Consumer",COST:"Consumer",TGT:"Consumer",MCD:"Consumer",NKE:"Consumer",SBUX:"Consumer",HD:"Consumer",
-  XOM:"Energy",CVX:"Energy",COP:"Energy",SLB:"Energy",
-  GE:"Industrial",CAT:"Industrial",HON:"Industrial",BA:"Industrial",UPS:"Industrial",FDX:"Industrial",
-  NFLX:"Media",DIS:"Media",PYPL:"Fintech",UBER:"Tech",SPOT:"Tech",SNOW:"Tech",PLTR:"Tech",
+  // Tech
+  AAPL:"Tech",MSFT:"Tech",NVDA:"Tech",GOOGL:"Tech",GOOG:"Tech",META:"Tech",AMZN:"Tech",TSLA:"Tech",
+  ORCL:"Tech",ADBE:"Tech",CRM:"Tech",INTC:"Tech",AMD:"Tech",QCOM:"Tech",TXN:"Tech",AVGO:"Tech",
+  MU:"Tech",AMAT:"Tech",LRCX:"Tech",KLAC:"Tech",MRVL:"Tech",SNPS:"Tech",CDNS:"Tech",ANSS:"Tech",
+  NOW:"Tech",WDAY:"Tech",TEAM:"Tech",ZM:"Tech",DDOG:"Tech",OKTA:"Tech",CRWD:"Tech",PANW:"Tech",
+  FTNT:"Tech",ZS:"Tech",NET:"Tech",SNOW:"Tech",PLTR:"Tech",UBER:"Tech",LYFT:"Tech",DASH:"Tech",
+  ABNB:"Tech",RBLX:"Tech",U:"Tech",COIN:"Crypto",HOOD:"Crypto",SOFI:"Fintech",
+  IBM:"Tech",HPQ:"Tech",HPE:"Tech",DELL:"Tech",NTAP:"Tech",PSTG:"Tech",WDC:"Tech",STX:"Tech",
+  ANET:"Tech",CSCO:"Tech",JNPR:"Tech",INTU:"Tech",ADSK:"Tech",CTSH:"Tech",ACN:"Tech",
+  GLOB:"Tech",EPAM:"Tech",MSTR:"Crypto",
+  // Finance
+  JPM:"Finance",BAC:"Finance",WFC:"Finance",C:"Finance",GS:"Finance",MS:"Finance",
+  USB:"Finance",TFC:"Finance",PNC:"Finance",COF:"Finance",AXP:"Finance",DFS:"Finance",
+  V:"Finance",MA:"Finance",PYPL:"Fintech",SQ:"Fintech",FIS:"Finance",FISV:"Finance",
+  GPN:"Finance",WEX:"Finance",BLK:"Finance",SCHW:"Finance",ICE:"Finance",CME:"Finance",
+  NDAQ:"Finance",CBOE:"Finance",MCO:"Finance",SPGI:"Finance",
+  MET:"Finance",PRU:"Finance",AFL:"Finance",ALL:"Finance",PGR:"Finance",TRV:"Finance",
+  CB:"Finance",AIG:"Finance",HIG:"Finance",LNC:"Finance",
+  BX:"Finance",KKR:"Finance",APO:"Finance",CG:"Finance",ARES:"Finance",BAM:"Finance",BN:"Finance",
+  // Healthcare
+  UNH:"Health",CVS:"Health",CI:"Health",HUM:"Health",ELV:"Health",CNC:"Health",MOH:"Health",
+  JNJ:"Health",LLY:"Health",ABBV:"Health",MRK:"Health",PFE:"Health",BMY:"Health",
+  AZN:"Health",NVO:"Health",SNY:"Health",GILD:"Health",AMGN:"Health",REGN:"Health",
+  VRTX:"Health",BIIB:"Biotech",MRNA:"Biotech",BNTX:"Biotech",
+  TMO:"Health",DHR:"Health",A:"Health",BIO:"Health",IQV:"Health",VEEV:"Health",
+  IDXX:"Health",MTD:"Health",WAT:"Health",SYK:"Health",BSX:"Health",MDT:"Health",
+  ABT:"Health",BAX:"Health",BDX:"Health",EW:"Health",ISRG:"Health",ZBH:"Health",RMD:"Health",
+  HCA:"Health",THC:"Health",UHS:"Health",ENSG:"Health",
+  // Consumer Discretionary
+  HD:"Consumer",LOW:"Consumer",TJX:"Consumer",ROST:"Consumer",BURL:"Consumer",ULTA:"Consumer",
+  WMT:"Consumer",COST:"Consumer",TGT:"Consumer",DG:"Consumer",DLTR:"Consumer",KR:"Consumer",SFM:"Consumer",
+  MCD:"Consumer",CMG:"Consumer",YUM:"Consumer",QSR:"Consumer",DPZ:"Consumer",SBUX:"Consumer",
+  DRI:"Consumer",TXRH:"Consumer",NKE:"Consumer",LULU:"Consumer",PVH:"Consumer",RL:"Consumer",
+  VFC:"Consumer",TPR:"Consumer",CPRI:"Consumer",SKX:"Consumer",
+  F:"Consumer",GM:"Consumer",RIVN:"Consumer",LCID:"Consumer",STLA:"Consumer",
+  MAR:"Consumer",HLT:"Consumer",IHG:"Consumer",H:"Consumer",
+  MGM:"Consumer",LVS:"Consumer",WYNN:"Consumer",CZR:"Consumer",
+  BKNG:"Consumer",EXPE:"Consumer",TRIP:"Consumer",
+  EBAY:"Consumer",ETSY:"Consumer",W:"Consumer",CVNA:"Consumer",KMX:"Consumer",AN:"Consumer",PAG:"Consumer",
+  // Consumer Staples
+  PG:"Staples",KO:"Staples",PEP:"Staples",MDLZ:"Staples",KHC:"Staples",GIS:"Staples",
+  K:"Staples",CPB:"Staples",SJM:"Staples",CAG:"Staples",MKC:"Staples",
+  PM:"Staples",MO:"Staples",BTI:"Staples",MNST:"Staples",KDP:"Staples",STZ:"Staples",
+  BUD:"Staples",TAP:"Staples",SAM:"Staples",CL:"Staples",CHD:"Staples",EL:"Staples",
+  // Energy
+  XOM:"Energy",CVX:"Energy",COP:"Energy",EOG:"Energy",PXD:"Energy",DVN:"Energy",
+  FANG:"Energy",MPC:"Energy",VLO:"Energy",PSX:"Energy",OXY:"Energy",HES:"Energy",
+  APA:"Energy",CTRA:"Energy",MRO:"Energy",SLB:"Energy",HAL:"Energy",BKR:"Energy",
+  NOV:"Energy",FTI:"Energy",KMI:"Energy",WMB:"Energy",OKE:"Energy",
+  EPD:"Energy",ET:"Energy",MPLX:"Energy",PAA:"Energy",
+  BEP:"Energy",CWEN:"Energy",
+  // Industrials
+  GE:"Industrial",CAT:"Industrial",HON:"Industrial",MMM:"Industrial",EMR:"Industrial",
+  ETN:"Industrial",PH:"Industrial",ROK:"Industrial",AME:"Industrial",DOV:"Industrial",XYL:"Industrial",
+  BA:"Industrial",LMT:"Industrial",RTX:"Industrial",NOC:"Industrial",GD:"Industrial",
+  HII:"Industrial",TDG:"Industrial",HWM:"Industrial",SPR:"Industrial",
+  UPS:"Industrial",FDX:"Industrial",DAL:"Industrial",UAL:"Industrial",AAL:"Industrial",
+  LUV:"Industrial",JBLU:"Industrial",ALK:"Industrial",CHRW:"Industrial",EXPD:"Industrial",
+  XPO:"Industrial",SAIA:"Industrial",DE:"Industrial",AGCO:"Industrial",PCAR:"Industrial",
+  CMI:"Industrial",ALSN:"Industrial",WM:"Industrial",RSG:"Industrial",CLH:"Industrial",
+  GWW:"Industrial",FAST:"Industrial",SNA:"Industrial",SWK:"Industrial",GNRC:"Industrial",
+  // Media / Telecom
+  NFLX:"Media",DIS:"Media",PARA:"Media",WBD:"Media",FOXA:"Media",FOX:"Media",NYT:"Media",NWSA:"Media",
+  SPOT:"Media",SIRI:"Media",T:"Telecom",VZ:"Telecom",TMUS:"Telecom",LUMN:"Telecom",
+  FYBR:"Telecom",CHTR:"Telecom",CMCSA:"Media",CABO:"Telecom",
+  SNAP:"Media",PINS:"Media",RDDT:"Media",MTCH:"Media",IAC:"Media",
+  // Materials / Mining
+  LIN:"Materials",APD:"Materials",SHW:"Materials",PPG:"Materials",ECL:"Materials",
+  EMN:"Materials",CE:"Materials",AVNT:"Materials",HUN:"Materials",
+  NEM:"Mining",GOLD:"Mining",AEM:"Mining",WPM:"Mining",FNV:"Mining",RGLD:"Mining",
+  HL:"Mining",PAAS:"Mining",AG:"Mining",FCX:"Mining",TECK:"Mining",AA:"Materials",
+  CENX:"Materials",NUE:"Materials",STLD:"Materials",CLF:"Materials",RS:"Materials",
+  BHP:"Mining",RIO:"Mining",VALE:"Mining",SCCO:"Mining",MLM:"Materials",VMC:"Materials",
+  CRH:"Materials",MOS:"Materials",NTR:"Materials",CF:"Materials",FMC:"Materials",
+  // Real Estate
+  AMT:"Real Estate",CCI:"Real Estate",SBAC:"Real Estate",EQIX:"Real Estate",DLR:"Real Estate",
+  IRM:"Real Estate",PLD:"Real Estate",EGP:"Real Estate",FR:"Real Estate",REXR:"Real Estate",STAG:"Real Estate",
+  SPG:"Real Estate",O:"Real Estate",NNN:"Real Estate",ADC:"Real Estate",
+  EQR:"Real Estate",AVB:"Real Estate",ESS:"Real Estate",MAA:"Real Estate",UDR:"Real Estate",CPT:"Real Estate",
+  VTR:"Real Estate",WELL:"Real Estate",PEAK:"Real Estate",OHI:"Real Estate",
+  ARE:"Real Estate",BXP:"Real Estate",SLG:"Real Estate",VNO:"Real Estate",
+  PSA:"Real Estate",EXR:"Real Estate",CUBE:"Real Estate",
+  INVH:"Real Estate",AMH:"Real Estate",
+  // Utilities
+  NEE:"Utilities",DUK:"Utilities",SO:"Utilities",D:"Utilities",AEP:"Utilities",
+  EXC:"Utilities",XEL:"Utilities",PCG:"Utilities",ED:"Utilities",PEG:"Utilities",
+  AWK:"Utilities",WEC:"Utilities",CMS:"Utilities",DTE:"Utilities",PPL:"Utilities",
+  AES:"Utilities",NI:"Utilities",EVRG:"Utilities",OGE:"Utilities",
+  SRE:"Utilities",EIX:"Utilities",ETR:"Utilities",FE:"Utilities",AEE:"Utilities",CNP:"Utilities",
+  // Crypto-adjacent
+  MARA:"Crypto",RIOT:"Crypto",CLSK:"Crypto",HUT:"Crypto",BTBT:"Crypto",BTDR:"Crypto",WULF:"Crypto",
+  UPST:"Fintech",AFRM:"Fintech",LC:"Fintech",
 };
 
 const SECTOR_COLOR = {
-  Tech:"#7dd3f0", Finance:"#34d399", Health:"#f472b6",
-  Consumer:"#fb923c", Energy:"#a3e635", Industrial:"#60a5fa",
-  Media:"#a78bfa", Fintech:"#f59e0b",
+  Tech:"#7dd3f0",     Finance:"#34d399",   Health:"#f472b6",
+  Consumer:"#fb923c", Staples:"#fde68a",   Energy:"#a3e635",
+  Industrial:"#60a5fa", Media:"#a78bfa",   Telecom:"#818cf8",
+  Materials:"#d97706", Mining:"#f59e0b",   "Real Estate":"#2dd4bf",
+  Utilities:"#86efac", Biotech:"#e879f9",  Crypto:"#facc15",
+  Fintech:"#38bdf8",
 };
 
 async function fetchEarningsCalBatch(tickers) {
-  // Yahoo v1/finance/calendar/earnings returns upcoming earnings for a date range
-  // We also pull calendarEvents from quoteSummary for each ticker in parallel
-  const today = new Date();
-  const in45  = new Date(today.getTime() + 45 * 86400000);
-  const fmt   = d => d.toISOString().slice(0, 10);
-  
-  try {
-    // Fetch upcoming earnings dates via Yahoo calendar endpoint
-    const r = await fetch(
-      `${YF_PROXY}?path=v1/finance/calendar/earnings&startDate=${fmt(today)}&endDate=${fmt(in45)}&size=100`
-    );
-    if (r.ok) {
-      const d = await r.json();
-      const rows = d?.result?.rows ?? [];
-      if (rows.length > 0) {
-        return rows.map(row => ({
-          ticker:     row.ticker ?? "",
-          company:    row.companyshortname ?? row.ticker ?? "",
-          date:       row.startdatetime ? new Date(row.startdatetime).toISOString().slice(0,10) : null,
-          time:       row.startdatetimetype === "BMO" ? "Before Open" : row.startdatetimetype === "AMC" ? "After Close" : "TBD",
-          epsEst:     row.epsestimate ?? null,
-          epsActual:  row.epsactual   ?? null,
-          sector:     SECTOR_MAP[row.ticker] ?? "Other",
-        })).filter(r => r.date);
-      }
-    }
-  } catch {}
-
-  // Fallback: batch quoteSummary for our watchlist
   const results = [];
-  const CHUNK = 10;
+  const CHUNK = 8;
   for (let i = 0; i < tickers.length; i += CHUNK) {
     const chunk = tickers.slice(i, i + CHUNK);
     await Promise.all(chunk.map(async ticker => {
       try {
-        const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${ticker}&modules=calendarEvents%2CearningsHistory`);
+        const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${ticker}&modules=calendarEvents%2CearningsHistory%2Cprice`);
         if (!r.ok) return;
         const d = await r.json();
         const s = d?.quoteSummary?.result?.[0];
         if (!s) return;
-        const cal = s.calendarEvents?.earnings;
-        const hist = s.earningsHistory?.history ?? [];
+        const cal   = s.calendarEvents?.earnings;
+        const price = s.price;
+        const hist  = s.earningsHistory?.history ?? [];
         const dates = cal?.earningsDate ?? [];
-        if (dates.length > 0) {
-          results.push({
-            ticker,
-            company:    ticker,
-            date:       new Date(dates[0].raw * 1000).toISOString().slice(0,10),
-            time:       cal.earningsCallTime === "BMO" ? "Before Open" : cal.earningsCallTime === "AMC" ? "After Close" : "TBD",
-            epsEst:     cal.epsEstimate?.raw ?? null,
-            epsActual:  null,
-            revenueEst: cal.revenueEstimate?.raw ?? null,
-            lastEps:    hist.length > 0 ? hist[hist.length-1]?.epsActual?.raw ?? null : null,
-            sector:     SECTOR_MAP[ticker] ?? "Other",
-          });
-        }
+        if (dates.length === 0) return;
+
+        // Yahoo returns earningsDate as array; [0] = next date, sometimes two
+        // dates straddle the expected window — take the earliest future one
+        const now = Date.now() / 1000;
+        const next = dates.find(d => d.raw > now - 86400) ?? dates[0];
+        if (!next) return;
+
+        // Timing: Yahoo sometimes puts BMO/AMC in the second date object
+        // or in earningsCallTime. We try both.
+        const callTime = cal.earningsCallTime ??
+          (dates[1] ? (dates[1].raw - dates[0].raw < 86400 ? "AMC" : null) : null);
+        const time = callTime === "BMO" ? "Before Open"
+                   : callTime === "AMC" ? "After Close"
+                   : "TBD";
+
+        results.push({
+          ticker,
+          company:    price?.shortName ?? price?.longName ?? ticker,
+          date:       new Date(next.raw * 1000).toISOString().slice(0, 10),
+          time,
+          epsEst:     cal.epsEstimate?.raw     ?? null,
+          epsActual:  null,
+          revenueEst: cal.revenueEstimate?.raw ?? null,
+          lastEps:    hist.length > 0 ? (hist[hist.length - 1]?.epsActual?.raw ?? null) : null,
+          sector:     SECTOR_MAP[ticker] ?? "Other",
+        });
       } catch {}
     }));
   }
-  return results.sort((a, b) => a.date.localeCompare(b.date));
+  // Filter to only future dates, sort chronologically
+  const today = new Date().toISOString().slice(0, 10);
+  return results
+    .filter(r => r.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function EarningsCalView() {
@@ -5563,7 +5675,7 @@ export default function MarketDashboard(){
   const TfBarInline=({value,onChange,options})=>(
     <div style={{display:"flex",gap:6}}>
       {options.map(k=>(
-        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?MAIN_COL+"20":"none",border:`1px solid ${value===k?MAIN_COL:"#1a2535"}`,color:value===k?MAIN_COL:"#162535",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
+        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?MAIN_COL+"20":"none",border:`1px solid ${value===k?MAIN_COL:"#1a2535"}`,color:value===k?MAIN_COL:"#8aacbe",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
       ))}
     </div>
   );
@@ -5643,7 +5755,7 @@ export default function MarketDashboard(){
             </div>
             <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"1px solid #1a2535"}}>
               {MARKET_TABS.map(tab=>(
-                <button key={tab.key} onClick={()=>{setActiveTab(tab.key);setSelected(allData[tab.key][0].id);}} style={{background:"none",border:"none",cursor:"pointer",color:activeTab===tab.key?TAB_COLOR[tab.key]:"#162535",fontSize:9,letterSpacing:1.5,padding:"7px 16px",borderBottom:`2px solid ${activeTab===tab.key?TAB_COLOR[tab.key]:"transparent"}`,marginBottom:-1,transition:"all 0.15s"}}>
+                <button key={tab.key} onClick={()=>{setActiveTab(tab.key);setSelected(allData[tab.key][0].id);}} style={{background:"none",border:"none",cursor:"pointer",color:activeTab===tab.key?TAB_COLOR[tab.key]:"#8aacbe",fontSize:9,letterSpacing:1.5,padding:"7px 16px",borderBottom:`2px solid ${activeTab===tab.key?TAB_COLOR[tab.key]:"transparent"}`,marginBottom:-1,transition:"all 0.15s"}}>
                   {tab.icon} {tab.label.toUpperCase()}
                 </button>
               ))}
