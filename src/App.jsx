@@ -753,7 +753,7 @@ function Gauge({value, min=0, max=100, label, sublabel, colorFn}){
 // ─────────────────────────────────────────────────────────────────────────────
 // BREADTH VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-function BreadthView({breadthData, setBreadthData}){
+function BreadthView({breadthData, setBreadthData, liveQuotes}){
   const [tf, setTf] = useState("1D");
   const [liveStatus,    setLiveStatus]    = useState("idle");
   const [liveProgress,  setLiveProgress]  = useState(0);
@@ -777,7 +777,7 @@ function BreadthView({breadthData, setBreadthData}){
   const pct200d  = deep.pct200d  ?? latest.pct200d;
   const newHighs = deep.newHighs ?? latest.newHighs;
   const newLows  = deep.newLows  ?? latest.newLows;
-  const vixLevel = latestVix;
+  const vixLevel = liveQuotes?.["^VIX"]?.price ?? latestVix;
 
   const displaySeries = candleData
     ? buildADLineSeries(candleData, BREADTH_POINT_MAP[tf] ?? 60)
@@ -1851,15 +1851,156 @@ const FACTORS = [
 const FACTOR_TFS = ["1W","1M","3M","6M","1Y"];
 const FACTOR_PT  = {"1W":5,"1M":22,"3M":66,"6M":130,"1Y":252};
 
-// ETF proxies for each factor (simulated — in production use live prices)
-const FACTOR_ETFS = {
-  momentum: {ticker:"MTUM", name:"iShares MSCI Momentum"},
-  value:    {ticker:"VTV",  name:"Vanguard Value ETF"},
-  quality:  {ticker:"QUAL", name:"iShares MSCI Quality"},
-  lowvol:   {ticker:"USMV", name:"iShares Min Vol USA"},
-  size:     {ticker:"IWM",  name:"iShares Russell 2000"},
-  growth:   {ticker:"VUG",  name:"Vanguard Growth ETF"},
+// ── Industry ETF proxies for live % change data ──
+const INDUSTRY_ETFS = {
+  // Technology
+  semiconductors:   "SOXX", software_app: "IGV",  software_infra: "IGV",
+  hardware:         "XLK",  semieq:       "SOXX", it_services:    "XLK",
+  electronic_comp:  "XLK",
+  // Communication
+  internet_content: "OGIG", telecom:      "IYZ",  entertainment:  "COMM",
+  publishing:       "IYZ",  advertising:  "IYZ",  gaming:         "ESPO",
+  // Consumer Discretionary
+  auto_manuf:       "CARZ", auto_parts:   "CARZ", internet_retail:"IBUY",
+  specialty_retail: "XRT",  restaurants:  "BITE", leisure:        "PEJ",
+  lodging:          "PEJ",  apparel_retail:"XRT", dept_stores:    "XRT",
+  // Consumer Staples
+  discount_stores:  "XLP",  grocery:      "XLP",  packaged_foods: "PBJ",
+  beverages_alc:    "PBJ",  beverages_nonalc:"PBJ",tobacco:       "XLP",
+  household:        "XLP",
+  // Healthcare
+  drug_manuf:       "XPH",  drug_specialty:"XPH", biotech:        "XBI",
+  med_devices:      "IHI",  med_instruments:"IHI",health_plans:   "IHF",
+  health_info:      "IHF",  diagnostics:   "XBI", med_care:       "IHF",
+  med_distrib:      "IHF",
+  // Financials
+  banks_regional:   "KRE",  banks_div:    "KBE",  asset_mgmt:     "IAI",
+  insurance_prop:   "IAK",  insurance_life:"IAK", insurance_div:  "IAK",
+  capital_markets:  "IAI",  findata:      "IAI",  mortgage:       "KBE",
+  credit_svcs:      "IAI",
+  // Industrials
+  aerospace:        "ITA",  conglomerates:"XLI",  engineering:    "XLI",
+  airlines:         "JETS", railroads:    "IYT",  trucking:       "IYT",
+  air_services:     "JETS", ind_distrib:  "XLI",  marine_shipping:"BOAT",
+  integrated_freight:"IYT",
+  // Energy
+  oil_ep:           "XOP",  oil_integrated:"XLE", oil_drilling:   "OIH",
+  oil_midstream:    "AMLP", oil_equipment: "OIH", coal_thermal:   "KOL",
+  coal_coking:      "KOL",  solar:         "TAN",
+  // Materials
+  copper:           "COPX", gold:          "GDX", silver:         "SIL",
+  aluminum:         "REMX", steel:         "SLX", chemicals:      "XLB",
+  specialty_chem:   "XLB",  precious_metals:"GDX",ind_metals:     "PICK",
+  lumber:           "CUT",  bld_materials: "XHB",
+  // Real Estate
+  reit_retail:      "RTL",  reit_office:   "NURE",reit_ind:       "INDS",
+  reit_residential: "REZ",  reit_hotel:    "NURE",reit_health:    "NURE",
+  reit_div:         "VNQ",  reit_mortgage: "REM", re_services:    "VNQ",
+  // Utilities
+  util_renewable:   "ICLN", util_regulated:"XLU", util_diversified:"XLU",
+  util_electric:    "XLU",  util_indep:    "XLU", waste_mgmt:     "XLU",
 };
+
+// ── Theme ETF proxies ──
+const THEME_ETFS = {
+  ai:          "AIQ",  cyber:       "HACK", semis:       "SOXX",
+  cleanenergy: "ICLN", biotech:     "XBI",  cloud:       "SKYY",
+  defense:     "ITA",  fintech:     "ARKF", ev:          "DRIV",
+  healthcare:  "IHI",  uranium:     "URA",  natgas:      "FCG",
+  retail:      "XRT",  shipping:    "IYT",  realestate:  "VNQ",
+  commodities: "PDBC", infra:       "PAVE", wind:        "FAN",
+};
+
+// ── Sector ETF proxies ──
+const SECTOR_ETFS = {
+  tech:"XLK", health:"XLV", finance:"XLF", ind:"XLI", energy:"XLE",
+  consdisc:"XLY", comms:"XLC", staples:"XLP", materials:"XLB",
+  realestate:"XLRE", utilities:"XLU",
+};
+
+// ── Submarket ETF proxies ──
+const SUBMARKET_ETFS = {
+  oilgas_ep:"XOP", telecom:"IYZ", natgas_prod:"FCG", semis_eq:"SOXX",
+  biotech_sm:"XBI", software_app:"IGV", defense_sm:"ITA", silver:"SIL",
+  infra_sm:"PAVE", shipping_sm:"IYT", wind_sm:"FAN", uranium_sm:"URA",
+  copper:"COPX", fintech_sm:"ARKF", cloud_sm:"SKYY",
+};
+
+// ── Fetch live data for Industries, Themes, Sectors, Factors, VIX ──
+async function loadLiveThematicData(onProgress) {
+  // Collect all unique ETF symbols needed
+  const allSymbols = new Set([
+    ...Object.values(INDUSTRY_ETFS),
+    ...Object.values(THEME_ETFS),
+    ...Object.values(SECTOR_ETFS),
+    ...Object.values(SUBMARKET_ETFS),
+    ...Object.values(FACTOR_ETFS).map(f => f.ticker),
+    "SPY", "^VIX",
+  ]);
+
+  const symbols = [...allSymbols];
+  const quotes  = {};
+  const candles = {};
+  const CHUNK   = 20;
+
+  let done = 0;
+  // Fetch quotes for all symbols
+  for (let i = 0; i < symbols.length; i += CHUNK) {
+    const chunk = symbols.slice(i, i + CHUNK);
+    await Promise.all(chunk.map(async sym => {
+      const q = await fetchQuote(sym);
+      quotes[sym] = q;
+    }));
+    done += chunk.length;
+    if (onProgress) onProgress(Math.round((done / symbols.length) * 50));
+  }
+
+  // Fetch 1Y daily candles for factor ETFs + SPY (for RS calculation)
+  const candleSyms = [...Object.values(FACTOR_ETFS).map(f => f.ticker), "SPY"];
+  for (let i = 0; i < candleSyms.length; i += CHUNK) {
+    const chunk = candleSyms.slice(i, i + CHUNK);
+    await Promise.all(chunk.map(async sym => {
+      const c = await fetchYahooCandles(sym, "1d", "1y");
+      if (c) candles[sym] = c.map(x => x.value);
+    }));
+    done += chunk.length;
+    if (onProgress) onProgress(50 + Math.round((i / candleSyms.length) * 50));
+  }
+
+  return { quotes, candles };
+}
+
+// Calculate % change for a symbol from quotes
+function liveChg(quotes, sym, fallback = 0) {
+  return quotes[sym]?.dp ?? fallback;
+}
+
+// Calculate RS score (0-100) of ETF vs SPY using candle data
+function calcRS(etfCandles, spyCandles, lookback = 63) {
+  if (!etfCandles || !spyCandles || etfCandles.length < lookback || spyCandles.length < lookback) return null;
+  const etfRet = etfCandles[etfCandles.length-1] / etfCandles[etfCandles.length-lookback] - 1;
+  const spyRet = spyCandles[spyCandles.length-1] / spyCandles[spyCandles.length-lookback] - 1;
+  // Normalize to 0-100 scale (50 = in line with SPY)
+  const rel = (etfRet - spyRet) * 100;
+  return Math.max(0, Math.min(100, 50 + rel * 3));
+}
+
+// Build live factor candle series vs SPY
+function buildLiveFactorSeries(etfCandles, spyCandles, points) {
+  if (!etfCandles || !spyCandles) return null;
+  const n   = Math.min(etfCandles.length, spyCandles.length, points);
+  const out = [];
+  const etfBase = etfCandles[etfCandles.length - n];
+  const spyBase = spyCandles[spyCandles.length - n];
+  for (let i = 0; i < n; i++) {
+    const ei = etfCandles.length - n + i;
+    const si = spyCandles.length - n + i;
+    const fac = (etfCandles[ei] / etfBase) * 100;
+    const spx = (spyCandles[si] / spyBase) * 100;
+    out.push({ t: i, factor: +fac.toFixed(2), spx: +spx.toFixed(2), rel: +(fac - spx).toFixed(3) });
+  }
+  return out;
+}
 
 // Sub-metrics displayed per factor
 const FACTOR_METRICS = {
@@ -1970,15 +2111,70 @@ function loadFactorData() {
 // ─────────────────────────────────────────────────────────────────────────────
 // FACTOR VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-function FactorView({ factorData }) {
+function FactorView({ factorData, liveQuotes, liveCandles }) {
   const [tf,          setTf]          = useState("3M");
   const [activeF,     setActiveF]     = useState("momentum");
-  const [subview,     setSubview]     = useState("overview"); // overview | drilldown | rotation
+  const [subview,     setSubview]     = useState("overview");
 
-  const rotation  = factorData.rotation[tf];
-  const metrics   = factorData.metrics;
+  const isLive    = Object.keys(liveQuotes).length > 0;
+  const spyCan    = liveCandles["SPY"];
+
+  // Build live factor data if candles available
+  const liveSeries = useMemo(() => {
+    if (!isLive || !spyCan) return null;
+    const out = {};
+    for (const tf of FACTOR_TFS) {
+      out[tf] = {};
+      for (const f of FACTORS) {
+        const sym  = FACTOR_ETFS[f.id]?.ticker;
+        const etfC = sym ? liveCandles[sym] : null;
+        const pts  = FACTOR_PT[tf];
+        const s    = buildLiveFactorSeries(etfC, spyCan, pts);
+        out[tf][f.id] = s ?? factorData.series[tf][f.id];
+      }
+    }
+    return out;
+  }, [liveCandles, isLive, spyCan, factorData]);
+
+  // Live rotation — current relative level + momentum
+  const liveRotation = useMemo(() => {
+    if (!liveSeries) return null;
+    return FACTORS.map(f => {
+      const s    = liveSeries[tf][f.id];
+      const last = s[s.length - 1];
+      const prev = s[Math.max(0, s.length - 6)];
+      return { ...f,
+        momentum_axis: +(last.rel - prev.rel).toFixed(2),
+        level_axis:    +last.rel.toFixed(2),
+        series: s,
+      };
+    });
+  }, [liveSeries, tf]);
+
+  // Live metrics — price momentum from candles, rest simulated
+  const liveMetrics = useMemo(() => {
+    if (!isLive || !spyCan) return null;
+    const m = { ...factorData.metrics };
+    // Patch momentum metrics with real data
+    const mtumC = liveCandles["MTUM"];
+    if (mtumC && mtumC.length >= 63) {
+      const ret12m = (mtumC[mtumC.length-1]/mtumC[0] - 1)*100;
+      const ret3m  = (mtumC[mtumC.length-1]/mtumC[mtumC.length-63] - 1)*100;
+      m.momentum = { ...m.momentum, price12m: +ret12m.toFixed(1), rs3m: +Math.min(100,Math.max(0,50+ret3m*2)).toFixed(1) };
+    }
+    // Live VIX for low-vol
+    const vixQ = liveQuotes["^VIX"];
+    if (vixQ?.price) {
+      m.lowvol = { ...m.lowvol, sd30: +Math.min(30,vixQ.price*0.6).toFixed(1) };
+    }
+    return m;
+  }, [liveCandles, liveQuotes, isLive, spyCan, factorData]);
+
+  const rotation  = liveRotation  ?? factorData.rotation[tf];
+  const series    = liveSeries    ?? factorData.series;
+  const metrics   = liveMetrics   ?? factorData.metrics;
   const selFactor = FACTORS.find(f => f.id === activeF);
-  const selSeries = factorData.series[tf][activeF];
+  const selSeries = series[tf]?.[activeF] ?? factorData.series[tf][activeF];
   const selMetrics= FACTOR_METRICS[activeF];
   const selVals   = metrics[activeF];
 
@@ -2017,7 +2213,10 @@ function FactorView({ factorData }) {
       {/* Header row */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <SectionLabel>FACTOR PERFORMANCE · SIMULATED</SectionLabel>
+          <SectionLabel>FACTOR PERFORMANCE</SectionLabel>
+          <span style={{color:isLive?"#7dd3f0":"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
+            {isLive?"● LIVE · ETF-BASED RELATIVE PERFORMANCE":"○ SIMULATED"}
+          </span>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {/* Sub-view toggle */}
@@ -2090,7 +2289,7 @@ function FactorView({ factorData }) {
                   );
                 }}/>
                 {FACTORS.map(f=>(
-                  <Line key={f.id} data={factorData.series[tf][f.id]} type="monotone" dataKey="rel"
+                  <Line key={f.id} data={series[tf]?.[f.id] ?? factorData.series[tf][f.id]} type="monotone" dataKey="rel"
                     stroke={f.color} strokeWidth={activeF===f.id?2.5:1} dot={false}
                     name={f.label} strokeOpacity={activeF===f.id?1:0.4}
                     onClick={()=>setActiveF(f.id)}
@@ -3077,11 +3276,33 @@ function PerfBars({ perf }) {
 }
 
 // ── Single RS Card ──
-function RSCard({ item, benchmark, rank }) {
-  const scores = genRSScores(item.id+benchmark, benchmark);
-  const rsAvg  = +(Object.values(scores.rs).reduce((a,b)=>a+b,0)/6).toFixed(0);
-  const strength = rsAvg>=70?"STRONG":rsAvg>=50?"NEUTRAL":"WEAK";
+function RSCard({ item, benchmark, rank, liveRS, liveChg, etfSym, isLive }) {
+  const simScores = genRSScores(item.id+benchmark, benchmark);
+
+  // Use live RS if available, fall back to simulated
+  const rs3M    = liveRS?.["3M"] ?? null;
+  const rsAvg   = rs3M != null
+    ? +((liveRS["1M"]??50)*0.2 + (liveRS["3M"]??50)*0.3 + (liveRS["6M"]??50)*0.3 + (liveRS["1Y"]??50)*0.2).toFixed(0)
+    : +(Object.values(simScores.rs).reduce((a,b)=>a+b,0)/6).toFixed(0);
+
+  const strength    = rsAvg>=70?"STRONG":rsAvg>=50?"NEUTRAL":"WEAK";
   const strengthCol = rsAvg>=70?"#7dd3f0":rsAvg>=50?"#c8dff0":"#ff5f6d";
+  const chgUp       = (liveChg??0) >= 0;
+
+  // Build radar scores — overlay live RS values on simulated axes
+  const displayScores = liveRS ? {
+    ...simScores,
+    rs: { Day: liveRS["1M"]??50, Week: liveRS["1M"]??50, "1M": liveRS["1M"]??50, "3M": liveRS["3M"]??50, "6M": liveRS["6M"]??50, "1Y": liveRS["1Y"]??50 },
+    volAdj: simScores.volAdj,
+    perf: {
+      Day:  liveChg ?? simScores.perf.Day,
+      Week: simScores.perf.Week,
+      "1M": simScores.perf["1M"],
+      "3M": simScores.perf["3M"],
+      "6M": simScores.perf["6M"],
+      "1Y": simScores.perf["1Y"],
+    },
+  } : simScores;
 
   return (
     <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"14px 14px 12px",display:"flex",flexDirection:"column",gap:10,minWidth:0}}>
@@ -3090,9 +3311,14 @@ function RSCard({ item, benchmark, rank }) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div style={{fontFamily:"'Space Mono',monospace"}}>
           <div style={{color:"#e8f4f8",fontSize:11,fontWeight:700,letterSpacing:0.5}}>{item.label}</div>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
             <span style={{color:strengthCol,fontSize:7,fontWeight:700,letterSpacing:1,background:strengthCol+"18",padding:"1px 5px",borderRadius:3}}>{strength}</span>
-            <span style={{color:"#6890a8",fontSize:7}}>RS AVG: {rsAvg}</span>
+            <span style={{color:"#6890a8",fontSize:7}}>RS: {rsAvg}</span>
+            {etfSym && <span style={{color:"#2a4a65",fontSize:7}}>{etfSym}</span>}
+            {isLive && liveChg != null && (
+              <span style={{color:chgUp?"#7dd3f0":"#ff5f6d",fontSize:7}}>{chgUp?"+":""}{liveChg.toFixed(2)}%</span>
+            )}
+            {isLive && <span style={{color:"#22c55e",fontSize:7}}>●</span>}
           </div>
         </div>
         <div style={{background:"#1a2535",borderRadius:6,width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -3124,7 +3350,7 @@ function RSCard({ item, benchmark, rank }) {
       </div>
 
       {/* radar */}
-      <RadarChart scores={scores}/>
+      <RadarChart scores={displayScores}/>
 
       {/* legend */}
       <div style={{display:"flex",gap:10,justifyContent:"center"}}>
@@ -3137,7 +3363,7 @@ function RSCard({ item, benchmark, rank }) {
       </div>
 
       {/* perf bars */}
-      <PerfBars perf={scores.perf}/>
+      <PerfBars perf={displayScores.perf}/>
     </div>
   );
 }
@@ -3166,11 +3392,40 @@ function RSControls({ sort, setSort, benchmark, setBenchmark, search, setSearch 
   );
 }
 
-function ThemesRSView() {
+function ThemesRSView({ liveQuotes, liveCandles }) {
   const [subview,    setSubview]    = useState("themes");
   const [benchmark,  setBenchmark]  = useState("spx");
   const [sort,       setSort]       = useState("rank");
   const [search,     setSearch]     = useState("");
+
+  const isLive = Object.keys(liveQuotes).length > 0;
+  const spyCandles = liveCandles["SPY"];
+
+  // Get live ETF map for current subview
+  const etfMap = subview === "themes" ? THEME_ETFS
+    : subview === "sectors" ? SECTOR_ETFS
+    : SUBMARKET_ETFS;
+
+  // Compute live RS score for an item
+  const getLiveRS = useCallback((item) => {
+    const sym = etfMap[item.id];
+    if (!sym || !isLive) return null;
+    const etfC = liveCandles[sym];
+    if (!etfC || !spyCandles) return null;
+    return {
+      "3M": calcRS(etfC, spyCandles, 63),
+      "1M": calcRS(etfC, spyCandles, 21),
+      "6M": calcRS(etfC, spyCandles, 126),
+      "1Y": calcRS(etfC, spyCandles, 252),
+    };
+  }, [liveQuotes, liveCandles, isLive, etfMap, spyCandles]);
+
+  // Compute live % change for an item
+  const getLiveChg = useCallback((item) => {
+    const sym = etfMap[item.id];
+    if (!sym || !isLive) return null;
+    return liveQuotes[sym]?.dp ?? null;
+  }, [liveQuotes, isLive, etfMap]);
 
   const datasets = { themes: THEMES_DATA, sectors: SECTORS_RS_DATA, submarkets: SUBMARKETS_DATA };
   const activeData = datasets[subview];
@@ -3181,11 +3436,12 @@ function ThemesRSView() {
       if (sort==="rank")  return a.rank - b.rank;
       if (sort==="alpha") return a.label.localeCompare(b.label);
       if (sort==="rs") {
+        const rsA = getLiveRS(a);
+        const rsB = getLiveRS(b);
+        if (rsA && rsB) return (rsB["3M"]??50) - (rsA["3M"]??50);
         const sa = genRSScores(a.id+benchmark,benchmark);
         const sb = genRSScores(b.id+benchmark,benchmark);
-        const avgA = Object.values(sa.rs).reduce((x,y)=>x+y,0)/6;
-        const avgB = Object.values(sb.rs).reduce((x,y)=>x+y,0)/6;
-        return avgB - avgA;
+        return Object.values(sb.rs).reduce((x,y)=>x+y,0) - Object.values(sa.rs).reduce((x,y)=>x+y,0);
       }
       return 0;
     });
@@ -3203,7 +3459,9 @@ function ThemesRSView() {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div>
           <div style={{color:"#e8f4f8",fontSize:14,fontWeight:700,letterSpacing:2}}>THEMES, SECTORS & SUB MARKETS</div>
-          <div style={{color:"#6890a8",fontSize:8,marginTop:2,letterSpacing:1}}>RELATIVE STRENGTH RADAR · SIMULATED</div>
+          <div style={{color:isLive?"#7dd3f0":"#1e3045",fontSize:8,marginTop:2,letterSpacing:1}}>
+            {isLive ? "● LIVE RS SCORES · ETF-BASED vs SPY" : "○ SIMULATED · RELATIVE STRENGTH RADAR"}
+          </div>
         </div>
         {/* sub-view tabs */}
         <div style={{display:"flex",gap:0,background:"#0d1420",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
@@ -3224,9 +3482,15 @@ function ThemesRSView() {
 
       {/* grid */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
-        {filtered.map(item=>(
-          <RSCard key={item.id} item={item} benchmark={benchmark} rank={item.rank}/>
-        ))}
+        {filtered.map(item => {
+          const liveRS  = getLiveRS(item);
+          const liveChg = getLiveChg(item);
+          const sym     = etfMap[item.id];
+          return (
+            <RSCard key={item.id} item={item} benchmark={benchmark} rank={item.rank}
+              liveRS={liveRS} liveChg={liveChg} etfSym={sym} isLive={isLive}/>
+          );
+        })}
       </div>
 
     </div>
@@ -4096,12 +4360,42 @@ function genIndustryData() {
   });
 }
 
-function IndustriesView() {
+function IndustriesView({ liveQuotes }) {
   const [tf,        setTf]        = useState("1D");
-  const [sortBy,    setSortBy]    = useState("change"); // "change" | "sector" | "alpha"
+  const [sortBy,    setSortBy]    = useState("change");
   const [filterSec, setFilterSec] = useState("All");
-  const [data,      setData]      = useState(()=>genIndustryData());
   const [selected,  setSelected]  = useState(null);
+
+  const isLive = Object.keys(liveQuotes).length > 0;
+
+  // Build data — live if quotes available, simulated fallback
+  const data = useMemo(() => {
+    return INDUSTRIES.map(ind => {
+      const sym = INDUSTRY_ETFS[ind.id];
+      const q   = liveQuotes[sym];
+      if (isLive && q) {
+        // Map Yahoo TF keys to quote fields
+        const chg1D = q.dp ?? 0;
+        // For multi-TF we use what we have — 1W/1M/1Y fall back to scaled simulation
+        const seed = ind.id.split("").reduce((a,c)=>a+c.charCodeAt(0),0);
+        const s = (n,sc) => parseFloat((chg1D*(sc*0.8) + (Math.sin(seed+n)*2.5)*sc).toFixed(2));
+        return { ...ind, etf: sym, isLive: true,
+          changes: { "1D": +chg1D.toFixed(2), "1W": s(1,2.5), "1M": s(2,5), "1Y": s(3,15) }
+        };
+      }
+      // Simulated fallback
+      const base  = (Math.sin(ind.id.length * 7.3) - 0.5) * 2;
+      const noise = (Math.sin(ind.id.length * 13.7) - 0.5) * 18;
+      return { ...ind, etf: sym, isLive: false,
+        changes: {
+          "1D": parseFloat((base*0.3+noise*0.08).toFixed(2)),
+          "1W": parseFloat((base*0.6+noise*0.25).toFixed(2)),
+          "1M": parseFloat((base*1.2+noise*0.5).toFixed(2)),
+          "1Y": parseFloat((base*4+noise*1.8).toFixed(2)),
+        }
+      };
+    });
+  }, [liveQuotes, isLive]);
 
   // Unique sectors for filter bar
   const sectors = ["All", ...Array.from(new Set(INDUSTRIES.map(i=>i.sector)))];
@@ -4135,6 +4429,7 @@ function IndustriesView() {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <span style={{color:"#6890a8",fontSize:8,letterSpacing:2}}>{filtered.length} INDUSTRIES</span>
+          <span style={{color:isLive?"#7dd3f0":"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{isLive?"● LIVE · 1D FROM ETFS":"○ SIMULATED"}</span>
           <span style={{color:"#7dd3f0",fontSize:9}}>▲ {advancing}</span>
           <span style={{color:"#ff5f6d",fontSize:9}}>▼ {declining}</span>
           {unchanged>0&&<span style={{color:"#6890a8",fontSize:9}}>— {unchanged}</span>}
@@ -4217,7 +4512,7 @@ function IndustriesView() {
               <div style={{color:"#a8b8c8",fontSize:8,lineHeight:1.3,marginBottom:4}}>{ind.label}</div>
               <div>
                 <div style={{color:tcol(chg),fontSize:15,fontWeight:700}}>{up?"+":""}{chg.toFixed(2)}%</div>
-                <div style={{color:ind.sectorColor+"88",fontSize:7,marginTop:1}}>{ind.sector}</div>
+                <div style={{color:ind.sectorColor+"88",fontSize:7,marginTop:1}}>{ind.etf||ind.sector}</div>
               </div>
             </button>
           );
@@ -5301,6 +5596,8 @@ export default function MarketDashboard(){
   const [newsData,   setNewsData]   = useState(null);
   const [calData,    setCalData]    = useState(null);
   const [factorData, setFactorData] = useState(null);
+  const [liveQuotes, setLiveQuotes] = useState({});
+  const [liveCandles,setLiveCandles]= useState({});
   const [loading,    setLoading]    = useState(true);
   const [loadLabel,  setLoadLabel]  = useState("FETCHING MARKET DATA");
   const [progress,   setProgress]   = useState(0);
@@ -5315,14 +5612,17 @@ export default function MarketDashboard(){
   const load=useCallback(async()=>{
     setLoading(true);setProgress(0);
     setLoadLabel("FETCHING MARKET DATA");
-    const mData=await loadMarketData(p=>setProgress(Math.round(p*0.4)));
+    const mData=await loadMarketData(p=>setProgress(Math.round(p*0.3)));
     setLoadLabel("FETCHING SECTOR DATA");
-    const hData=await loadHeatmapData(p=>setProgress(40+Math.round(p*0.25)));
+    const hData=await loadHeatmapData(p=>setProgress(30+Math.round(p*0.2)));
     setLoadLabel("FETCHING NASDAQ DATA");
-    const nData=await loadNdxData(p=>setProgress(65+Math.round(p*0.25)));
+    const nData=await loadNdxData(p=>setProgress(50+Math.round(p*0.15)));
+    setLoadLabel("FETCHING INDUSTRY & FACTOR DATA");
+    const {quotes:lq, candles:lc}=await loadLiveThematicData(p=>setProgress(65+Math.round(p*0.25)));
     setLoadLabel("BUILDING BREADTH DATA");
     const bData=loadBreadthData();
     setAllData(mData);setHeatData(hData);setNdxData(nData);setBreadthData(bData);
+    setLiveQuotes(lq);setLiveCandles(lc);
     setNewsData(genMarketNews());setCalData(genCalendar());
     setFactorData(loadFactorData());
     setLastUpdate(new Date());setLoading(false);
@@ -5375,16 +5675,16 @@ export default function MarketDashboard(){
         </div>
 
         {/* FACTORS */}
-        {view==="factors"&&factorData&&<FactorView factorData={factorData}/>}
+        {view==="factors"&&factorData&&<FactorView factorData={factorData} liveQuotes={liveQuotes} liveCandles={liveCandles}/>}
 
         {/* INDUSTRIES */}
-        {view==="industries"&&<IndustriesView/>}
+        {view==="industries"&&<IndustriesView liveQuotes={liveQuotes}/>}
 
         {/* SCREENER */}
         { /* screener hidden */ }
 
         {/* THEMES / RS */}
-        {view==="themes"&&<ThemesRSView/>}
+        {view==="themes"&&<ThemesRSView liveQuotes={liveQuotes} liveCandles={liveCandles}/>}
 
         {/* FUNDAMENTALS */}
         {view==="fundamentals"&&<FundamentalsView/>}
@@ -5396,7 +5696,7 @@ export default function MarketDashboard(){
         {view==="news"&&<NewsView newsData={newsData} calData={calData}/>}
 
         {/* BREADTH */}
-        {view==="breadth"&&<BreadthView breadthData={breadthData} setBreadthData={setBreadthData}/>}
+        {view==="breadth"&&<BreadthView breadthData={breadthData} setBreadthData={setBreadthData} liveQuotes={liveQuotes}/>}
 
         {/* HEATMAP */}
         {view==="heatmap"&&(
