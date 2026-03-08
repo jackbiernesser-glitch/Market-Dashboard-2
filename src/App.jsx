@@ -298,15 +298,17 @@ function toYahooSymbol(symbol) {
 async function fetchQuote(symbol) {
   const ySym = toYahooSymbol(symbol);
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const r = await fetch(
-      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=1d&range=5d`
+      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=1d&range=5d`,
+      { signal: controller.signal }
     );
+    clearTimeout(timeout);
     const d = await r.json();
     const result = d?.chart?.result?.[0];
     const meta = result?.meta;
     if (!meta?.regularMarketPrice) return null;
-    // For indices like ^VIX, read the last actual close from candle data
-    // rather than relying solely on meta which can return stale values
     const closes = result?.indicators?.quote?.[0]?.close?.filter(c => c != null) ?? [];
     const price     = closes.length > 0 ? closes[closes.length - 1] : meta.regularMarketPrice;
     const prevClose = closes.length > 1 ? closes[closes.length - 2]
@@ -322,9 +324,13 @@ async function fetchQuote(symbol) {
 async function fetchYahooCandles(symbol, interval, range) {
   const ySym = toYahooSymbol(symbol);
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const r = await fetch(
-      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=${interval}&range=${range}`
+      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=${interval}&range=${range}`,
+      { signal: controller.signal }
     );
+    clearTimeout(timeout);
     const d = await r.json();
     const result = d?.chart?.result?.[0];
     if (!result?.timestamp || !result?.indicators?.quote?.[0]?.close) return null;
@@ -510,61 +516,66 @@ async function fetchQuotesBatch(symbols, onProgress) {
 // DATA LOADERS
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadMarketData(onProgress) {
-  const out={};
-  const allAssets=Object.entries(ASSET_META);
-  let done=0,total=allAssets.reduce((s,[,a])=>s+a.length,0);
-  for(const [cat,assets] of allAssets) {
-    out[cat]=await Promise.all(assets.map(async asset=>{
-      let livePrice=null,liveDp=null,histories={};
-      if(asset.symbol) {
-        const quote=await fetchQuote(asset.symbol);
-        if(quote) { livePrice=quote.price; liveDp=quote.dp ?? null; }
-        for(const tf of TIMEFRAMES) {
-          const {interval,range}=tfToYahoo(tf.key);
-          const candles=await fetchYahooCandles(asset.symbol,interval,range);
-          if(candles?.length>2){
-            if(livePrice) candles[candles.length-1].value=livePrice;
-            histories[tf.key]=candles;
+  const out = {};
+  const allAssets = Object.entries(ASSET_META);
+  const total = allAssets.reduce((s, [, a]) => s + a.length, 0);
+  let done = 0;
+
+  await Promise.all(allAssets.map(async ([cat, assets]) => {
+    out[cat] = await Promise.all(assets.map(async asset => {
+      let livePrice = null, liveDp = null, histories = {};
+      if (asset.symbol) {
+        // Fetch quote + all 4 timeframe candles in parallel
+        const tfs = TIMEFRAMES.map(tf => tfToYahoo(tf.key));
+        const [quote, ...candleResults] = await Promise.all([
+          fetchQuote(asset.symbol),
+          ...tfs.map(({ interval, range }) => fetchYahooCandles(asset.symbol, interval, range)),
+        ]);
+        if (quote) { livePrice = quote.price; liveDp = quote.dp ?? null; }
+        TIMEFRAMES.forEach((tf, i) => {
+          const candles = candleResults[i];
+          if (candles?.length > 2) {
+            if (livePrice) candles[candles.length - 1].value = livePrice;
+            histories[tf.key] = candles;
           } else {
-            const vol=asset.base>1000?0.008:asset.base>10?0.015:0.004;
-            histories[tf.key]=generateHistory(livePrice||asset.base,vol,tf.days);
+            const vol = asset.base > 1000 ? 0.008 : asset.base > 10 ? 0.015 : 0.004;
+            histories[tf.key] = generateHistory(livePrice || asset.base, vol, tf.days);
           }
-        }
+        });
       } else {
-        const vol=asset.base>1000?0.006:asset.base>10?0.015:0.03;
-        for(const tf of TIMEFRAMES) histories[tf.key]=generateHistory(asset.base,vol,tf.days);
+        const vol = asset.base > 1000 ? 0.006 : asset.base > 10 ? 0.015 : 0.03;
+        for (const tf of TIMEFRAMES) histories[tf.key] = generateHistory(asset.base, vol, tf.days);
       }
-      done++;onProgress(Math.round(done/total*100));
-      return{...asset,livePrice,liveDp,histories,isLive:!!livePrice};
+      done++; onProgress(Math.round(done / total * 100));
+      return { ...asset, livePrice, liveDp, histories, isLive: !!livePrice };
     }));
-  }
+  }));
   return out;
 }
 
 async function loadSectorData(sectors, onProgress) {
-  let done=0,total=sectors.reduce((s,sec)=>s+sec.stocks.length,0);
-  return Promise.all(sectors.map(async sector=>{
-    const stocks=await Promise.all(sector.stocks.map(async stock=>{
-      const quote=await fetchQuote(stock.symbol);
-      done++;onProgress(Math.round(done/total*100));
-      // Fetch 1Y daily candles to compute real multi-TF changes
-      const candles=await fetchYahooCandles(stock.symbol,"1d","1y");
-      const closes=candles?.map(c=>c.value)||[];
-      const last=quote?.price??stock.base;
-      function chgFrom(n){ return closes.length>=n ? +((last/closes[closes.length-n]-1)*100).toFixed(2) : simPct(stock.base,0.018); }
-      const simChanges={
-        "1D": quote?.dp ?? simPct(stock.base,0.012),
-        "1W": chgFrom(5),
-        "1M": chgFrom(21),
-        "1Y": chgFrom(252),
+  let done = 0, total = sectors.reduce((s, sec) => s + sec.stocks.length, 0);
+  return Promise.all(sectors.map(async sector => {
+    const stocks = await Promise.all(sector.stocks.map(async stock => {
+      const [quote, candles] = await Promise.all([
+        fetchQuote(stock.symbol),
+        fetchYahooCandles(stock.symbol, "1d", "1y"),
+      ]);
+      done++; onProgress(Math.round(done / total * 100));
+      const closes = candles?.map(c => c.value) || [];
+      const last = quote?.price ?? stock.base;
+      function chgFrom(n) { return closes.length >= n ? +((last / closes[closes.length - n] - 1) * 100).toFixed(2) : simPct(stock.base, 0.018); }
+      const simChanges = {
+        "1D": quote?.dp ?? simPct(stock.base, 0.012),
+        "1W": chgFrom(5), "1M": chgFrom(21), "1Y": chgFrom(252),
       };
-      return{...stock,price:last,changes:simChanges,isLive:!!quote};
+      return { ...stock, price: last, changes: simChanges, isLive: !!quote };
     }));
-    const changes={};
-    for(const tfKey of HEATMAP_TFS){
-      changes[tfKey]=parseFloat((stocks.reduce((s,st)=>s+st.changes[tfKey],0)/stocks.length).toFixed(2));
+    const changes = {};
+    for (const tfKey of HEATMAP_TFS) {
+      changes[tfKey] = parseFloat((stocks.reduce((s, st) => s + st.changes[tfKey], 0) / stocks.length).toFixed(2));
     }
-    return{...sector,stocks,changes};
+    return { ...sector, stocks, changes };
   }));
 }
 
