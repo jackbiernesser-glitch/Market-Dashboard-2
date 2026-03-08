@@ -4656,12 +4656,26 @@ async function fetchEarningsCalendar(symbol) {
 
 async function fetchFredSeries(seriesId) {
   try {
-    const r = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}&vintage_date=${new Date().toISOString().slice(0,10)}`);
+    // Route through our Vercel proxy to avoid CORS issues
+    const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`;
+    const r = await fetch(`${YF_PROXY}?path=fred/${encodeURIComponent(seriesId)}&url=${encodeURIComponent(url)}`);
+    // If proxy doesn't support FRED, try direct (works server-side / some browsers)
+    if (!r.ok) throw new Error('proxy failed');
     const text = await r.text();
+    if (!text.includes(',')) throw new Error('not csv');
     const rows = text.trim().split('\n').slice(1);
     return rows.map(row => { const [date, val] = row.split(','); return { date, value: parseFloat(val) }; })
                .filter(r => !isNaN(r.value)).slice(-60);
-  } catch { return null; }
+  } catch {
+    // Direct FRED fetch fallback (may work depending on CORS policy)
+    try {
+      const r2 = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`);
+      const text = await r2.text();
+      const rows = text.trim().split('\n').slice(1);
+      return rows.map(row => { const [date, val] = row.split(','); return { date, value: parseFloat(val) }; })
+                 .filter(r => !isNaN(r.value)).slice(-60);
+    } catch { return null; }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5346,14 +5360,22 @@ function EcoCalView() {
   const [seriesData, setSeriesData] = useState({});
   const [loading, setLoading] = useState(false);
 
+  const seriesCacheRef = useRef({});
+
   const loadSeries = useCallback(async (event) => {
     if (!event.fred) return;
-    if (seriesData[event.fred]) return; // cached
+    if (seriesCacheRef.current[event.fred]) {
+      setSeriesData(seriesCacheRef.current);
+      return;
+    }
     setLoading(true);
     const data = await fetchFredSeries(event.fred);
-    if (data) setSeriesData(prev => ({...prev, [event.fred]: data}));
+    if (data) {
+      seriesCacheRef.current = {...seriesCacheRef.current, [event.fred]: data};
+      setSeriesData({...seriesCacheRef.current});
+    }
     setLoading(false);
-  }, [seriesData]);
+  }, []);
 
   useEffect(() => { loadSeries(ECO_EVENTS[0]); }, []);
 
@@ -5644,7 +5666,7 @@ export default function MarketDashboard(){
             <div style={{marginBottom:18}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <span style={{color:"#6890a8",fontSize:8,letterSpacing:2}}>TOP MOVERS</span>
-                <TfBarInline value={tf} onChange={setTf} options={CHART_TIMEFRAMES.map(t=>t.key)}/>
+                <TfBarInline value={tf} onChange={setTf} options={TIMEFRAMES.map(t=>t.key)}/>
               </div>
               <TopMovers allData={allData} tf={tf} onSelect={handleSelect}/>
             </div>
