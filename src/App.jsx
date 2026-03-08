@@ -141,7 +141,6 @@ const NAV_TABS   = [
   {key:"factors",      label:"Factors",      icon:"◑"},
   {key:"chart",        label:"Chart",        icon:"⬡"},
   {key:"news",         label:"News",         icon:"◻"},
-  {key:"watchlist",    label:"Watchlist",    icon:"★"},
 ];
 
 const NEWS_FILTERS = [
@@ -691,7 +690,7 @@ function TfBar({value,onChange,options}){
   return(
     <div style={{display:"flex",gap:6}}>
       {options.map(k=>(
-        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?MAIN_COL+"20":"none",border:`1px solid ${value===k?MAIN_COL:"#1a2535"}`,color:value===k?MAIN_COL:"#5a7a95",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
+        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?MAIN_COL+"20":"none",border:`1px solid ${value===k?MAIN_COL:"#1a2535"}`,color:value===k?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
       ))}
     </div>
   );
@@ -1100,7 +1099,7 @@ function TopMovers({allData,tf,onSelect}){
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKET CARD + DETAIL CHART
 // ─────────────────────────────────────────────────────────────────────────────
-function MarketCard({asset,tf,color,isSelected,isWatched,onSelect,onWatch}){
+function MarketCard({asset,tf,color,isSelected,onSelect}){
   const h=asset.histories[tf],last=currentPrice(asset,tf),p=pct(h),up=p>=0,lc=up?"#7dd3f0":"#ff5f6d";
   return(
     <div style={{position:"relative"}}>
@@ -1123,9 +1122,6 @@ function MarketCard({asset,tf,color,isSelected,isWatched,onSelect,onWatch}){
             <Area type="monotone" dataKey="value" stroke={lc} strokeWidth={1.5} fill={`url(#g-${asset.id})`} dot={false}/>
           </AreaChart>
         </ResponsiveContainer>
-      </button>
-      <button onClick={e=>{e.stopPropagation();onWatch();}} style={{position:"absolute",top:9,right:10,background:"none",border:"none",cursor:"pointer",fontSize:13,color:isWatched?"#f59e0b":"#4a6a85",transition:"color 0.15s",lineHeight:1,padding:2}}>
-        {isWatched?"★":"☆"}
       </button>
     </div>
   );
@@ -1264,7 +1260,7 @@ function HeatmapView({heatData, ndxData, tf}){
           {/* index toggle */}
           <div style={{display:"flex",gap:4}}>
             {[{k:"spx",l:"S&P 500"},{k:"ndx",l:"NASDAQ 100"}].map(({k,l})=>(
-              <button key={k} onClick={()=>handleIndexSwitch(k)} style={{background:index===k?"#7dd3f020":"none",border:`1px solid ${index===k?"#7dd3f0":"#1a2535"}`,color:index===k?"#7dd3f0":"#5a7a95",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>{l}</button>
+              <button key={k} onClick={()=>handleIndexSwitch(k)} style={{background:index===k?"#7dd3f020":"none",border:`1px solid ${index===k?"#7dd3f0":"#1a2535"}`,color:index===k?"#7dd3f0":"#a8c4d4",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1,transition:"all 0.15s"}}>{l}</button>
             ))}
           </div>
         </div>
@@ -1329,7 +1325,7 @@ function HeatmapView({heatData, ndxData, tf}){
             {HEATMAP_TFS.map(t=>(
               <div key={t} style={{display:"flex",alignItems:"center",gap:4}}>
                 <div style={{width:8,height:8,borderRadius:1,background:TF_COLS[t]}}/>
-                <span style={{color:tf===t?"#e8f4f8":"#5a7a95",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</span>
+                <span style={{color:tf===t?"#e8f4f8":"#a8c4d4",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</span>
               </div>
             ))}
           </div>
@@ -1430,104 +1426,8 @@ function HeatmapView({heatData, ndxData, tf}){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WATCHLIST
-// ─────────────────────────────────────────────────────────────────────────────
-function WatchlistPanel({allData,watchlist,tf,onSelect,onRemove}){
-  const all=Object.entries(allData).flatMap(([cat,assets])=>assets.map(a=>({...a,cat})));
-  const watched=all.filter(a=>watchlist.has(a.id));
-  return(
-    <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"14px 16px"}}>
-      <div style={{color:"#f59e0b",fontSize:9,letterSpacing:2,marginBottom:10,fontFamily:"'Space Mono',monospace"}}>★ WATCHLIST</div>
-      {watched.length===0
-        ?<div style={{color:"#6890a8",fontSize:11,fontFamily:"'Space Mono',monospace",padding:"8px 0"}}>Star any asset to add it here</div>
-        :watched.map(a=>{
-          const p=pct(a.histories[tf]),up=p>=0,last=currentPrice(a,tf);
-          return(
-            <button key={a.id} onClick={()=>onSelect(a.cat,a.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"none",border:"none",cursor:"pointer",padding:"7px 0",borderBottom:"1px solid #1a2535",width:"100%"}}>
-              <div>
-                <span style={{color:"#5a7a95",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{a.label}</span>
-                <span style={{color:a.isLive?"#22c55e":"#4a6a85",fontSize:8,marginLeft:6}}>{a.isLive?"●":"○"}</span>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:14}}>
-                <span style={{color:"#5a7a95",fontSize:10,fontFamily:"'Space Mono',monospace"}}>{fmt(last,a.unit,a)}</span>
-                <span style={{color:up?"#7dd3f0":"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",minWidth:56,textAlign:"right"}}>{up?"+":""}{p.toFixed(2)}%</span>
-                <button onClick={e=>{e.stopPropagation();onRemove(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#6890a8",fontSize:11,padding:0}}>✕</button>
-              </div>
-            </button>
-          );
-        })
-      }
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // NEWS VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-const IMPACT_COL = {high:"#ff5f6d", medium:"#c8dff0", low:"#7dd3f0"};
-const TAG_COL    = {MACRO:"#b8e8ff",MARKETS:"#7dd3f0",TECH:"#c8dff0",BANKS:"#c8dff0",CRYPTO:"#c8dff0",ENERGY:"#c8dff0",HEALTH:"#34d399",FOREX:"#b8e8ff"};
-
-// Fetch real company news from Yahoo Finance for a given ticker symbol
-async function fetchTickerNews(symbol) {
-  try {
-    const sym = symbol.toUpperCase();
-    const r = await fetch(
-      `${YF_PROXY}?path=v1/finance/search&q=${encodeURIComponent(sym)}&newsCount=20&quotesCount=0`
-    );
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
-    const news = d?.news;
-    if (!Array.isArray(news) || news.length === 0) return { data: null, error: "empty" };
-    return {
-      data: news.slice(0, 20).map((item, i) => ({
-        id:      `live-${i}`,
-        source:  item.publisher || "Yahoo Finance",
-        time:    new Date(item.providerPublishTime * 1000).toLocaleString(),
-        sector:  "general",
-        tag:     sym,
-        title:   item.title,
-        summary: item.title,
-        url:     item.link || "#",
-        isLive:  true,
-      })),
-      error: null,
-    };
-  } catch(e) { return { data: null, error: e.message }; }
-}
-
-// General market news — Yahoo Finance trending/general news
-async function fetchGeneralNews(category="general") {
-  try {
-    const queryMap = {
-      general: "stock market", tech: "technology stocks", finance: "finance banking",
-      crypto: "cryptocurrency bitcoin", energy: "oil energy stocks",
-      health: "healthcare pharma", forex: "currency forex dollar",
-    };
-    const q = queryMap[category] || "stock market";
-    const r = await fetch(
-      `${YF_PROXY}?path=v1/finance/search&q=${encodeURIComponent(q)}&newsCount=20&quotesCount=0`
-    );
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
-    const news = d?.news;
-    if (!Array.isArray(news) || news.length === 0) return { data: null, error: "empty" };
-    return {
-      data: news.slice(0, 20).map((item, i) => ({
-        id:      `gen-${i}`,
-        source:  item.publisher || "Yahoo Finance",
-        time:    new Date(item.providerPublishTime * 1000).toLocaleString(),
-        sector:  category,
-        tag:     category.toUpperCase(),
-        title:   item.title,
-        summary: item.title,
-        url:     item.link || "#",
-        isLive:  true,
-      })),
-      error: null,
-    };
-  } catch(e) { return { data: null, error: e.message }; }
-}
-
 function NewsView({newsData, calData}) {
   const [filter,        setFilter]       = useState("all");
   const [selected,      setSelected]     = useState(newsData[0]);
@@ -1652,7 +1552,7 @@ function NewsView({newsData, calData}) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",gap:0,borderBottom:"1px solid #1a2535"}}>
           {[{key:"news",label:"◻ HEADLINES"},{key:"calendar",label:"⊞ ECO CALENDAR"},{key:"search",label:"⌕ SEARCH"}].map(t=>(
-            <button key={t.key} onClick={()=>setNewsTab(t.key)} style={{background:"none",border:"none",cursor:"pointer",color:newsTab===t.key?MAIN_COL:"#5a7a95",fontSize:9,letterSpacing:1.5,padding:"6px 16px",borderBottom:`2px solid ${newsTab===t.key?MAIN_COL:"transparent"}`,marginBottom:-1,transition:"all 0.15s",fontFamily:"'Space Mono',monospace"}}>
+            <button key={t.key} onClick={()=>setNewsTab(t.key)} style={{background:"none",border:"none",cursor:"pointer",color:newsTab===t.key?MAIN_COL:"#a8c4d4",fontSize:9,letterSpacing:1.5,padding:"6px 16px",borderBottom:`2px solid ${newsTab===t.key?MAIN_COL:"transparent"}`,marginBottom:-1,transition:"all 0.15s",fontFamily:"'Space Mono',monospace"}}>
               {t.label}
             </button>
           ))}
@@ -1660,7 +1560,7 @@ function NewsView({newsData, calData}) {
         {newsTab==="news" && (
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {NEWS_FILTERS.map(f=>(
-              <button key={f.key} onClick={()=>setFilter(f.key)} style={{background:filter===f.key?MAIN_COL+"20":"none",border:`1px solid ${filter===f.key?MAIN_COL:"#1a2535"}`,color:filter===f.key?MAIN_COL:"#5a7a95",borderRadius:6,padding:"2px 9px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
+              <button key={f.key} onClick={()=>setFilter(f.key)} style={{background:filter===f.key?MAIN_COL+"20":"none",border:`1px solid ${filter===f.key?MAIN_COL:"#1a2535"}`,color:filter===f.key?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"2px 9px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
                 {f.label}
               </button>
             ))}
@@ -1856,6 +1756,15 @@ const FACTORS = [
 const FACTOR_TFS = ["1W","1M","3M","6M","1Y"];
 const FACTOR_PT  = {"1W":5,"1M":22,"3M":66,"6M":130,"1Y":252};
 
+const FACTOR_ETFS = {
+  momentum: {ticker:"MTUM", name:"iShares MSCI Momentum"},
+  value:    {ticker:"VTV",  name:"Vanguard Value ETF"},
+  quality:  {ticker:"QUAL", name:"iShares MSCI Quality"},
+  lowvol:   {ticker:"USMV", name:"iShares Min Vol USA"},
+  size:     {ticker:"IWM",  name:"iShares Russell 2000"},
+  growth:   {ticker:"VUG",  name:"Vanguard Growth ETF"},
+};
+
 // ── Industry ETF proxies for live % change data ──
 const INDUSTRY_ETFS = {
   // Technology
@@ -1932,6 +1841,21 @@ const SUBMARKET_ETFS = {
 };
 
 // ── Fetch live data for Industries, Themes, Sectors, Factors, VIX ──
+// Dedicated VIX fetch — reads last candle close directly, most reliable for indices
+async function fetchVIX() {
+  try {
+    const r = await fetch(`${YF_PROXY}?path=v8/finance/chart/%5EVIX&interval=1d&range=1mo`);
+    const d = await r.json();
+    const result = d?.chart?.result?.[0];
+    const closes = result?.indicators?.quote?.[0]?.close?.filter(c => c != null) ?? [];
+    if (closes.length === 0) return null;
+    const price     = closes[closes.length - 1];
+    const prevClose = closes.length > 1 ? closes[closes.length - 2] : price;
+    const dp        = +((price - prevClose) / prevClose * 100).toFixed(2);
+    return { price: +price.toFixed(2), prevClose: +prevClose.toFixed(2), dp };
+  } catch { return null; }
+}
+
 async function loadLiveThematicData(onProgress) {
   // Collect all unique ETF symbols needed
   const allSymbols = new Set([
@@ -1949,9 +1873,10 @@ async function loadLiveThematicData(onProgress) {
   const CHUNK   = 20;
 
   let done = 0;
-  // Fetch quotes for all symbols
-  for (let i = 0; i < symbols.length; i += CHUNK) {
-    const chunk = symbols.slice(i, i + CHUNK);
+  // Fetch quotes for all symbols (excluding ^VIX which gets special treatment)
+  const etfSymbols = symbols.filter(s => s !== "^VIX");
+  for (let i = 0; i < etfSymbols.length; i += CHUNK) {
+    const chunk = etfSymbols.slice(i, i + CHUNK);
     await Promise.all(chunk.map(async sym => {
       const q = await fetchQuote(sym);
       quotes[sym] = q;
@@ -1959,6 +1884,8 @@ async function loadLiveThematicData(onProgress) {
     done += chunk.length;
     if (onProgress) onProgress(Math.round((done / symbols.length) * 50));
   }
+  // Fetch VIX separately with dedicated function
+  quotes["^VIX"] = await fetchVIX();
 
   // Fetch 1Y daily candles for factor ETFs + SPY (for RS calculation)
   const candleSyms = [...Object.values(FACTOR_ETFS).map(f => f.ticker), "SPY"];
@@ -2226,7 +2153,7 @@ function FactorView({ factorData, liveQuotes, liveCandles, thematicLoading }) {
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {/* Sub-view toggle */}
           {[{k:"overview",l:"OVERVIEW"},{k:"drilldown",l:"DRILLDOWN"},{k:"rotation",l:"ROTATION"}].map(({k,l})=>(
-            <button key={k} onClick={()=>setSubview(k)} style={{background:subview===k?MAIN_COL+"20":"none",border:`1px solid ${subview===k?MAIN_COL:"#1a2535"}`,color:subview===k?MAIN_COL:"#5a7a95",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>{l}</button>
+            <button key={k} onClick={()=>setSubview(k)} style={{background:subview===k?MAIN_COL+"20":"none",border:`1px solid ${subview===k?MAIN_COL:"#1a2535"}`,color:subview===k?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>{l}</button>
           ))}
           <TfBar value={tf} onChange={setTf} options={FACTOR_TFS}/>
         </div>
@@ -2873,7 +2800,7 @@ function ScreenerView() {
             </div>
           )}
           <button onClick={()=>setShowPassing(v=>!v)}
-            style={{background:showPassing?"#7dd3f020":"none",border:`1px solid ${showPassing?"#7dd3f0":"#1a2535"}`,color:showPassing?"#7dd3f0":"#5a7a95",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:8,letterSpacing:1}}>
+            style={{background:showPassing?"#7dd3f020":"none",border:`1px solid ${showPassing?"#7dd3f0":"#1a2535"}`,color:showPassing?"#7dd3f0":"#a8c4d4",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:8,letterSpacing:1}}>
             {showPassing ? "⌗ FILTER ON" : "⌗ FILTER OFF"}
           </button>
           <span style={{color:"#5a7a95",fontSize:10}}>|</span>
@@ -2935,7 +2862,7 @@ function ScreenerView() {
               <div style={{display:"flex",gap:4}}>
                 {["All","Stock","ETF"].map(t=>(
                   <button key={t} onClick={()=>setTypeFilter(t)}
-                    style={{background:typeFilter===t?"#7dd3f020":"none",border:`1px solid ${typeFilter===t?"#7dd3f0":"#1a2535"}`,color:typeFilter===t?"#7dd3f0":"#5a7a95",borderRadius:5,padding:"2px 10px",cursor:"pointer",fontSize:8}}>
+                    style={{background:typeFilter===t?"#7dd3f020":"none",border:`1px solid ${typeFilter===t?"#7dd3f0":"#1a2535"}`,color:typeFilter===t?"#7dd3f0":"#a8c4d4",borderRadius:5,padding:"2px 10px",cursor:"pointer",fontSize:8}}>
                     {t}
                   </button>
                 ))}
@@ -3472,7 +3399,7 @@ function ThemesRSView({ liveQuotes, liveCandles, thematicLoading }) {
         <div style={{display:"flex",gap:0,background:"#0d1420",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
           {SUBVIEWS.map(({k,l})=>(
             <button key={k} onClick={()=>setSubview(k)}
-              style={{background:subview===k?"#7dd3f020":"none",border:"none",borderRight:"1px solid #1a2535",color:subview===k?"#b8e8ff":"#5a7a95",padding:"6px 16px",cursor:"pointer",fontSize:9,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
+              style={{background:subview===k?"#7dd3f020":"none",border:"none",borderRight:"1px solid #1a2535",color:subview===k?"#b8e8ff":"#a8c4d4",padding:"6px 16px",cursor:"pointer",fontSize:9,letterSpacing:1,fontFamily:"'Space Mono',monospace",transition:"all 0.15s"}}>
               {l}
             </button>
           ))}
@@ -4443,7 +4370,7 @@ function IndustriesView({ liveQuotes, thematicLoading }) {
           {/* Sort */}
           <div style={{display:"flex",gap:3}}>
             {[{k:"change",l:"% CHANGE"},{k:"sector",l:"SECTOR"},{k:"alpha",l:"A–Z"}].map(({k,l})=>(
-              <button key={k} onClick={()=>setSortBy(k)} style={{background:sortBy===k?"#7dd3f020":"none",border:`1px solid ${sortBy===k?"#7dd3f0":"#1a2535"}`,color:sortBy===k?"#7dd3f0":"#5a7a95",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:7,letterSpacing:1}}>{l}</button>
+              <button key={k} onClick={()=>setSortBy(k)} style={{background:sortBy===k?"#7dd3f020":"none",border:`1px solid ${sortBy===k?"#7dd3f0":"#1a2535"}`,color:sortBy===k?"#7dd3f0":"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:7,letterSpacing:1}}>{l}</button>
             ))}
           </div>
           {/* TF */}
@@ -5610,7 +5537,6 @@ export default function MarketDashboard(){
   const [selected,   setSelected]   = useState("spx");
   const [tf,         setTf]         = useState("1M");
   const [heatTf,     setHeatTf]     = useState("1D");
-  const [watchlist,  setWatchlist]  = useState(new Set());
   const [view,       setView]       = useState("markets");
   const [lastUpdate, setLastUpdate] = useState(null);
 
@@ -5649,7 +5575,6 @@ export default function MarketDashboard(){
   useEffect(()=>{const id=setInterval(loadThematic,300000);return()=>clearInterval(id);},[loadThematic]);
 
   const handleSelect=useCallback((cat,id)=>{setActiveTab(cat);setSelected(id);setView("markets");},[]);
-  const toggleWatch =useCallback((id)=>setWatchlist(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;}),[]);
 
   if(loading) return <LoadingScreen progress={progress} label={loadLabel}/>;
   if(!newsData||!calData) return <LoadingScreen progress={100} label="BUILDING NEWS FEED"/>;
@@ -5684,8 +5609,8 @@ export default function MarketDashboard(){
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
             <button onClick={load} style={{background:"none",border:"1px solid #1a2535",color:"#6890a8",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:9}}>↺</button>
             {NAV_TABS.map(t=>(
-              <button key={t.key} onClick={()=>setView(t.key)} style={{background:view===t.key?"#152030":"none",border:`1px solid ${view===t.key?C_MAIN_COL:"#1a2535"}`,color:view===t.key?C_MAIN_COL:"#5a7a95",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>
-                {t.icon} {t.key==="watchlist"?`${t.label}${watchlist.size?` (${watchlist.size})`:""}`:t.label.toUpperCase()}
+              <button key={t.key} onClick={()=>setView(t.key)} style={{background:view===t.key?"#152030":"none",border:`1px solid ${view===t.key?C_MAIN_COL:"#2a3f52"}`,color:view===t.key?C_MAIN_COL:"#a8c4d4",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>
+                {t.icon} {t.label.toUpperCase()}
               </button>
             ))}
           </div>
@@ -5727,15 +5652,6 @@ export default function MarketDashboard(){
         )}
 
         {/* WATCHLIST */}
-        {view==="watchlist"&&(
-          <>
-            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
-              <TfBarInline value={tf} onChange={setTf} options={CHART_TIMEFRAMES.map(t=>t.key)}/>
-            </div>
-            <WatchlistPanel allData={allData} watchlist={watchlist} tf={tf} onSelect={handleSelect} onRemove={toggleWatch}/>
-          </>
-        )}
-
         {/* MARKETS */}
         {view==="markets"&&(
           <>
@@ -5756,8 +5672,8 @@ export default function MarketDashboard(){
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(185px,1fr))",gap:10,marginBottom:14}}>
               {assets.map(asset=>(
                 <MarketCard key={asset.id} asset={asset} tf={tf} color={color}
-                  isSelected={selected===asset.id} isWatched={watchlist.has(asset.id)}
-                  onSelect={()=>setSelected(asset.id)} onWatch={()=>toggleWatch(asset.id)}/>
+                  isSelected={selected===asset.id}
+                  onSelect={()=>setSelected(asset.id)}/>
               ))}
             </div>
             <DetailChart asset={selAsset} tf={tf}/>
