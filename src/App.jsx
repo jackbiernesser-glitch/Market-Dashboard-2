@@ -5209,60 +5209,6 @@ const SECTOR_COLOR = {
   Fintech:"#38bdf8",
 };
 
-async function fetchEarningsCalBatch(tickers) {
-  const now = Date.now() / 1000;
-  const today = new Date().toISOString().slice(0, 10);
-
-  // Fire all requests simultaneously — each with its own 6s timeout
-  // No chunking loop means no sequential stalling
-  const settled = await Promise.allSettled(tickers.map(async ticker => {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 6000);
-    try {
-      const r = await fetch(
-        `${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(ticker)}&modules=calendarEvents%2Cprice`,
-        { signal: controller.signal }
-      );
-      clearTimeout(t);
-      if (!r.ok) return null;
-      const d = await r.json();
-      const s = d?.quoteSummary?.result?.[0];
-      if (!s) return null;
-      const cal   = s.calendarEvents?.earnings;
-      const price = s.price;
-      const dates = cal?.earningsDate ?? [];
-      if (dates.length === 0) return null;
-
-      const next = dates.find(d => d.raw > now - 86400) ?? dates[0];
-      if (!next) return null;
-
-      const callTime = cal.earningsCallTime;
-      const time = callTime === "BMO" ? "Before Open"
-                 : callTime === "AMC" ? "After Close"
-                 : "TBD";
-
-      return {
-        ticker,
-        company:    price?.shortName ?? price?.longName ?? ticker,
-        date:       new Date(next.raw * 1000).toISOString().slice(0, 10),
-        time,
-        epsEst:     cal.epsEstimate?.raw     ?? null,
-        epsActual:  null,
-        revenueEst: cal.revenueEstimate?.raw ?? null,
-        sector:     SECTOR_MAP[ticker] ?? "Other",
-      };
-    } catch {
-      clearTimeout(t);
-      return null;
-    }
-  }));
-
-  return settled
-    .filter(r => r.status === "fulfilled" && r.value?.date >= today)
-    .map(r => r.value)
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
 function EarningsCalView() {
   const [rows,      setRows]      = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -5273,66 +5219,82 @@ function EarningsCalView() {
 
   useEffect(() => {
     let cancelled = false;
-    const total = EARNINGS_WATCHLIST.length;
     const today = new Date().toISOString().slice(0, 10);
     const now   = Date.now() / 1000;
-    let count   = 0;
-    const accumulated = [];
+    const CONCURRENCY = 15;
 
-    setLoading(true);
-    setRows([]);
-    setFetched(0);
+    setLoading(true); setRows([]); setFetched(0);
 
-    // Fire all requests at once; update UI progressively as each resolves
-    Promise.allSettled(EARNINGS_WATCHLIST.map(async ticker => {
+    async function fetchTicker(ticker) {
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 6000);
+      const t = setTimeout(() => controller.abort(), 7000);
       try {
         const r = await fetch(
           `${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(ticker)}&modules=calendarEvents%2Cprice`,
           { signal: controller.signal }
         );
         clearTimeout(t);
-        if (!r.ok) return;
+        if (!r.ok) return null;
         const d = await r.json();
         const s = d?.quoteSummary?.result?.[0];
-        if (!s) return;
+        if (!s) return null;
         const cal   = s.calendarEvents?.earnings;
         const price = s.price;
         const dates = cal?.earningsDate ?? [];
-        if (!dates.length) return;
+        if (!dates.length) return null;
         const next = dates.find(d => d.raw > now - 86400) ?? dates[0];
-        if (!next || new Date(next.raw * 1000).toISOString().slice(0, 10) < today) return;
+        if (!next) return null;
+        const dateStr = new Date(next.raw * 1000).toISOString().slice(0, 10);
+        if (dateStr < today) return null;
         const callTime = cal.earningsCallTime;
-        const row = {
+        return {
           ticker,
           company:    price?.shortName ?? price?.longName ?? ticker,
-          date:       new Date(next.raw * 1000).toISOString().slice(0, 10),
+          date:       dateStr,
           time:       callTime === "BMO" ? "Before Open" : callTime === "AMC" ? "After Close" : "TBD",
           epsEst:     cal.epsEstimate?.raw     ?? null,
           epsActual:  null,
           revenueEst: cal.revenueEstimate?.raw ?? null,
           sector:     SECTOR_MAP[ticker] ?? "Other",
         };
-        accumulated.push(row);
-      } catch { clearTimeout(t); }
-    }).map(p => p.then(() => {
-      if (cancelled) return;
-      count++;
-      setFetched(count);
-      // Update rows every 20 resolutions so UI stays responsive
-      if (count % 20 === 0 || count === total) {
+      } catch { clearTimeout(t); return null; }
+    }
+
+    (async () => {
+      const tickers = [...EARNINGS_WATCHLIST];
+      const total   = tickers.length;
+      const accumulated = [];
+      let idx = 0, done = 0;
+
+      async function worker() {
+        while (idx < tickers.length) {
+          if (cancelled) return;
+          const ticker = tickers[idx++];
+          const row = await fetchTicker(ticker);
+          if (row) accumulated.push(row);
+          done++;
+          if (!cancelled) {
+            setFetched(done);
+            // Render partial results every 15 completions
+            if (done % 15 === 0 || done === total) {
+              const sorted = [...accumulated].sort((a, b) => a.date.localeCompare(b.date));
+              setRows(sorted);
+              setSelected(sel => sel ?? sorted[0] ?? null);
+            }
+          }
+        }
+      }
+
+      // Run CONCURRENCY workers in parallel
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+      if (!cancelled) {
         const sorted = [...accumulated].sort((a, b) => a.date.localeCompare(b.date));
         setRows(sorted);
-        if (!selected && sorted.length > 0) setSelected(sorted[0]);
+        setSelected(sel => sel ?? sorted[0] ?? null);
+        setLoading(false);
       }
-    }))).then(() => {
-      if (cancelled) return;
-      const sorted = [...accumulated].sort((a, b) => a.date.localeCompare(b.date));
-      setRows(sorted);
-      if (sorted.length > 0) setSelected(s => s ?? sorted[0]);
-      setLoading(false);
-    });
+    })();
 
     return () => { cancelled = true; };
   }, []);
