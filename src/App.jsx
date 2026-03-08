@@ -139,7 +139,11 @@ const NAV_TABS   = [
   {key:"fundamentals", label:"Fundamentals", icon:"ƒ"},
   {key:"breadth",      label:"Breadth",      icon:"⟁"},
   {key:"factors",      label:"Factors",      icon:"◑"},
-  {key:"chart",        label:"Chart",        icon:"⬡"},
+  {key:"rrg",          label:"RRG",          icon:"⊕"},
+  {key:"corr",         label:"Correlation",  icon:"⊠"},
+  {key:"options",      label:"Options",      icon:"Ω"},
+  {key:"earnings",     label:"Earnings",     icon:"◎"},
+  {key:"ecocal",       label:"Eco Calendar", icon:"⧖"},
   {key:"news",         label:"News",         icon:"◻"},
 ];
 
@@ -4607,9 +4611,867 @@ function IndustriesView({ liveQuotes, thematicLoading }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LOADING
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// FETCH HELPERS FOR NEW VIEWS
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchOptionsChain(symbol) {
+  try {
+    const r = await fetch(`${YF_PROXY}?path=v7/finance/options/${encodeURIComponent(symbol)}`);
+    const d = await r.json();
+    const result = d?.optionChain?.result?.[0];
+    if (!result) return null;
+    const quote = result.quote;
+    const opts  = result.options?.[0];
+    return {
+      price:      quote?.regularMarketPrice ?? null,
+      expDates:   result.expirationDates ?? [],
+      calls:      opts?.calls ?? [],
+      puts:       opts?.puts  ?? [],
+    };
+  } catch { return null; }
+}
+
+async function fetchOptionsForExp(symbol, expTimestamp) {
+  try {
+    const r = await fetch(`${YF_PROXY}?path=v7/finance/options/${encodeURIComponent(symbol)}&date=${expTimestamp}`);
+    const d = await r.json();
+    const opts = d?.optionChain?.result?.[0]?.options?.[0];
+    return { calls: opts?.calls ?? [], puts: opts?.puts ?? [] };
+  } catch { return null; }
+}
+
+async function fetchEarningsCalendar(symbol) {
+  try {
+    const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(symbol)}&modules=earnings,earningsHistory,calendarEvents`);
+    const d = await r.json();
+    const s = d?.quoteSummary?.result?.[0];
+    if (!s) return null;
+    return {
+      earningsHistory: s.earningsHistory?.history ?? [],
+      nextEarnings:    s.calendarEvents?.earnings ?? null,
+      earningsChart:   s.earnings?.earningsChart ?? null,
+    };
+  } catch { return null; }
+}
+
+async function fetchFredSeries(seriesId) {
+  try {
+    const r = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}&vintage_date=${new Date().toISOString().slice(0,10)}`);
+    const text = await r.text();
+    const rows = text.trim().split('\n').slice(1);
+    return rows.map(row => { const [date, val] = row.split(','); return { date, value: parseFloat(val) }; })
+               .filter(r => !isNaN(r.value)).slice(-60);
+  } catch { return null; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RRG VIEW — Relative Rotation Graph
+// ─────────────────────────────────────────────────────────────────────────────
+const RRG_SECTORS = [
+  {id:"XLK",  label:"Tech"},       {id:"XLV",  label:"Health"},
+  {id:"XLF",  label:"Finance"},    {id:"XLI",  label:"Industrials"},
+  {id:"XLE",  label:"Energy"},     {id:"XLY",  label:"Disc."},
+  {id:"XLC",  label:"Comms"},      {id:"XLP",  label:"Staples"},
+  {id:"XLB",  label:"Materials"},  {id:"XLRE", label:"Real Est."},
+  {id:"XLU",  label:"Utilities"},
+];
+const RRG_FACTORS = [
+  {id:"MTUM", label:"Momentum"},  {id:"VTV",  label:"Value"},
+  {id:"QUAL", label:"Quality"},   {id:"USMV", label:"Low Vol"},
+  {id:"IWM",  label:"Small Cap"}, {id:"VUG",  label:"Growth"},
+];
+
+function computeRRG(candles, spyCandles, trailLen=4) {
+  if (!candles || !spyCandles || candles.length < 20 || spyCandles.length < 20) return null;
+  const len = Math.min(candles.length, spyCandles.length);
+  const etf = candles.slice(-len);
+  const spy = spyCandles.slice(-len);
+  const rs = etf.map((v,i) => spy[i] > 0 ? v/spy[i] : 1);
+  // JdK RS-Ratio: smoothed ratio vs its own SMA
+  function sma(arr, n) { return arr.map((_,i) => i<n-1 ? null : arr.slice(i-n+1,i+1).reduce((a,b)=>a+b)/n); }
+  const sma10 = sma(rs, 10);
+  const valid = sma10.filter(v=>v!==null);
+  const mean  = valid.reduce((a,b)=>a+b,0)/valid.length;
+  const rsRatio = sma10.map(v => v == null ? null : 100 + (v - mean) / mean * 100);
+  // JdK RS-Momentum: rate of change of RS-Ratio
+  const rsMom = rsRatio.map((v,i) => {
+    if (v==null || i<4 || rsRatio[i-4]==null) return null;
+    return 100 + (v - rsRatio[i-4]);
+  });
+  // Trail = last N valid points
+  const trail = [];
+  for (let i = rsRatio.length-1; i>=0 && trail.length<trailLen; i--) {
+    if (rsRatio[i]!=null && rsMom[i]!=null) trail.unshift({x:rsRatio[i], y:rsMom[i]});
+  }
+  return trail.length > 0 ? trail : null;
+}
+
+function RRGView({ liveQuotes, liveCandles, thematicLoading }) {
+  const [mode, setMode] = useState("sectors");
+  const [trail, setTrail] = useState(8);
+  const items = mode === "sectors" ? RRG_SECTORS : RRG_FACTORS;
+  const spyCan = liveCandles?.["SPY"];
+  const isLive = spyCan && Object.keys(liveCandles).length > 1;
+
+  const points = useMemo(() => {
+    return items.map(item => {
+      const can = liveCandles?.[item.id];
+      const trl = computeRRG(can, spyCan, trail);
+      if (trl) return { ...item, trail: trl, x: trl[trl.length-1].x, y: trl[trl.length-1].y };
+      // Simulated fallback
+      const seed = item.id.split('').reduce((a,c)=>a+c.charCodeAt(0),0);
+      const x = 97 + (Math.sin(seed)*6);
+      const y = 97 + (Math.cos(seed*1.3)*6);
+      return { ...item, trail:[{x,y}], x, y, sim:true };
+    });
+  }, [liveCandles, spyCan, mode, trail]);
+
+  const quadrant = (x,y) => x>=100&&y>=100?"LEADING":x>=100&&y<100?"WEAKENING":x<100&&y>=100?"IMPROVING":"LAGGING";
+  const qColor   = q => q==="LEADING"?"#7dd3f0":q==="WEAKENING"?"#f59e0b":q==="IMPROVING"?"#34d399":"#ff5f6d";
+  const qBg      = q => q==="LEADING"?"#7dd3f008":q==="WEAKENING"?"#f59e0b08":q==="IMPROVING"?"#34d39908":"#ff5f6d08";
+
+  const xMin=93, xMax=107, yMin=93, yMax=107;
+  const toSvg = (val, min, max, size) => ((val-min)/(max-min))*size;
+
+  const W=560, H=460;
+
+  return (
+    <div style={{padding:"0 4px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>RELATIVE ROTATION GRAPH</div>
+          <div style={{color:isLive?"#7dd3f0":thematicLoading?"#c8dff0":"#6890a8",fontSize:8,marginTop:3,letterSpacing:1}}>
+            {isLive?"● LIVE · ETF vs SPY":thematicLoading?"◌ LOADING LIVE DATA...":"○ SIMULATED · RELATIVE STRENGTH vs SPY"}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",gap:4}}>
+            {[["sectors","SECTORS"],["factors","FACTORS"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setMode(k)} style={{background:mode===k?MAIN_COL+"20":"none",border:`1px solid ${mode===k?MAIN_COL:"#1a2535"}`,color:mode===k?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{l}</button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+            <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>TRAIL:</span>
+            {[4,8,12].map(t=>(
+              <button key={t} onClick={()=>setTrail(t)} style={{background:trail===t?MAIN_COL+"20":"none",border:`1px solid ${trail===t?MAIN_COL:"#1a2535"}`,color:trail===t?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"2px 7px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}W</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 220px",gap:16}}>
+        {/* SVG plot */}
+        <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:16,overflow:"hidden"}}>
+          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{fontFamily:"'Space Mono',monospace"}}>
+            {/* Quadrant backgrounds */}
+            {[
+              {x:W/2,y:0,w:W/2,h:H/2,q:"LEADING"},
+              {x:W/2,y:H/2,w:W/2,h:H/2,q:"WEAKENING"},
+              {x:0,y:H/2,w:W/2,h:H/2,q:"LAGGING"},
+              {x:0,y:0,w:W/2,h:H/2,q:"IMPROVING"},
+            ].map(({x,y,w,h,q})=>(
+              <g key={q}>
+                <rect x={x} y={y} width={w} height={h} fill={qBg(q)}/>
+                <text x={x+w/2} y={y+h/2} textAnchor="middle" dominantBaseline="middle"
+                  fill={qColor(q)} fontSize={10} opacity={0.25} letterSpacing={3}>{q}</text>
+              </g>
+            ))}
+            {/* Axes */}
+            <line x1={W/2} y1={0} x2={W/2} y2={H} stroke="#1a2535" strokeWidth={1}/>
+            <line x1={0} y1={H/2} x2={W} y2={H/2} stroke="#1a2535" strokeWidth={1}/>
+            {/* Axis labels */}
+            <text x={W-4} y={H/2-6} textAnchor="end" fill="#6890a8" fontSize={8}>RS-RATIO →</text>
+            <text x={W/2+4} y={10} fill="#6890a8" fontSize={8}>RS-MOMENTUM ↑</text>
+            <text x={W/2+4} y={H-4} fill="#6890a8" fontSize={8}>100</text>
+            <text x={4} y={H/2-4} fill="#6890a8" fontSize={8}>100</text>
+            {/* Points + trails */}
+            {points.map(pt=>{
+              const q  = quadrant(pt.x, pt.y);
+              const col= qColor(q);
+              const cx = toSvg(pt.x, xMin, xMax, W);
+              const cy = H - toSvg(pt.y, yMin, yMax, H);
+              return (
+                <g key={pt.id}>
+                  {/* Trail */}
+                  {pt.trail.length > 1 && pt.trail.map((p,i)=>{
+                    if(i===0) return null;
+                    const x1=toSvg(pt.trail[i-1].x,xMin,xMax,W);
+                    const y1=H-toSvg(pt.trail[i-1].y,yMin,yMax,H);
+                    const x2=toSvg(p.x,xMin,xMax,W);
+                    const y2=H-toSvg(p.y,yMin,yMax,H);
+                    return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={col} strokeWidth={1} opacity={0.2+i/pt.trail.length*0.5}/>;
+                  })}
+                  {/* Dot */}
+                  <circle cx={cx} cy={cy} r={6} fill={col+"33"} stroke={col} strokeWidth={1.5}/>
+                  {/* Label */}
+                  <text x={cx} y={cy-10} textAnchor="middle" fill={col} fontSize={8} fontWeight="700">{pt.label}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Legend / table */}
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {["LEADING","WEAKENING","IMPROVING","LAGGING"].map(q=>{
+            const inQ = points.filter(p=>quadrant(p.x,p.y)===q);
+            return (
+              <div key={q} style={{background:"#0d1420",border:`1px solid ${qColor(q)}22`,borderRadius:10,padding:"10px 12px"}}>
+                <div style={{color:qColor(q),fontSize:8,letterSpacing:1.5,marginBottom:6,fontFamily:"'Space Mono',monospace"}}>{q}</div>
+                {inQ.length===0
+                  ? <div style={{color:"#6890a8",fontSize:8}}>—</div>
+                  : inQ.map(p=>(
+                    <div key={p.id} style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{color:"#c8dff0",fontSize:9,fontFamily:"'Space Mono',monospace"}}>{p.label}</span>
+                      <span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{p.id}</span>
+                    </div>
+                  ))
+                }
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORRELATION MATRIX VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+const CORR_PRESETS = {
+  "Indices":     ["SPY","QQQ","IWM","DIA","^VIX"],
+  "Sectors":     ["XLK","XLV","XLF","XLI","XLE","XLY","XLC","XLP","XLB","XLRE","XLU"],
+  "Factors":     ["MTUM","VTV","QUAL","USMV","IWM","VUG"],
+  "Commodities": ["GLD","SLV","USO","UNG","PDBC"],
+  "Crypto":      ["BTC-USD","ETH-USD","SOL-USD"],
+};
+
+function computeCorr(a, b) {
+  const n = Math.min(a.length, b.length);
+  if (n < 5) return null;
+  const ax = a.slice(-n), bx = b.slice(-n);
+  const ma = ax.reduce((s,v)=>s+v,0)/n;
+  const mb = bx.reduce((s,v)=>s+v,0)/n;
+  const cov = ax.reduce((s,v,i)=>s+(v-ma)*(bx[i]-mb),0)/n;
+  const sa  = Math.sqrt(ax.reduce((s,v)=>s+(v-ma)**2,0)/n);
+  const sb  = Math.sqrt(bx.reduce((s,v)=>s+(v-mb)**2,0)/n);
+  return (sa===0||sb===0) ? null : +( cov/(sa*sb) ).toFixed(2);
+}
+
+function corrColor(r) {
+  if (r === null) return "#1a2535";
+  if (r >= 0.7)  return `rgba(125,211,240,${0.3+r*0.5})`;
+  if (r >= 0.3)  return `rgba(125,211,240,${0.1+r*0.3})`;
+  if (r >= -0.3) return `rgba(200,223,240,0.08)`;
+  if (r >= -0.7) return `rgba(255,95,109,${0.1+Math.abs(r)*0.3})`;
+  return `rgba(255,95,109,${0.3+Math.abs(r)*0.5})`;
+}
+
+function CorrView({ allData }) {
+  const [preset,   setPreset]   = useState("Sectors");
+  const [lookback, setLookback] = useState(60);
+  const [tickers,  setTickers]  = useState(CORR_PRESETS["Sectors"]);
+  const [input,    setInput]    = useState("");
+  const [candles,  setCandles]  = useState({});
+  const [loading,  setLoading]  = useState(false);
+
+  const loadCandles = useCallback(async (syms) => {
+    setLoading(true);
+    const result = {};
+    await Promise.all(syms.map(async sym => {
+      try {
+        const r = await fetch(`${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(sym)}&interval=1d&range=1y`);
+        const d = await r.json();
+        const closes = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(c=>c!=null) ?? [];
+        if (closes.length > 5) result[sym] = closes;
+      } catch {}
+    }));
+    setCandles(result);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadCandles(tickers); }, [tickers]);
+
+  const matrix = useMemo(() => {
+    const syms = tickers.filter(s => candles[s]);
+    return syms.map(a => syms.map(b => a===b ? 1 : computeCorr(
+      candles[a]?.slice(-lookback), candles[b]?.slice(-lookback)
+    )));
+  }, [candles, tickers, lookback]);
+
+  const syms = tickers.filter(s => candles[s]);
+
+  return (
+    <div style={{padding:"0 4px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>CORRELATION MATRIX</div>
+          <div style={{color:"#6890a8",fontSize:8,marginTop:3,letterSpacing:1}}>PAIRWISE PEARSON CORRELATION · DAILY RETURNS</div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
+          <div style={{display:"flex",gap:4}}>
+            {Object.keys(CORR_PRESETS).map(p=>(
+              <button key={p} onClick={()=>{setPreset(p);setTickers(CORR_PRESETS[p]);}} style={{background:preset===p?MAIN_COL+"20":"none",border:`1px solid ${preset===p?MAIN_COL:"#1a2535"}`,color:preset===p?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{p}</button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:4}}>
+            {[30,60,120,252].map(lb=>(
+              <button key={lb} onClick={()=>setLookback(lb)} style={{background:lookback===lb?MAIN_COL+"20":"none",border:`1px solid ${lookback===lb?MAIN_COL:"#1a2535"}`,color:lookback===lb?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{lb}D</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Custom ticker input */}
+      <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+        <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())}
+          onKeyDown={e=>{if(e.key==="Enter"&&input.trim()){const t=[...new Set([...tickers,input.trim()])];setTickers(t);setInput("");setPreset("Custom");}}}
+          placeholder="ADD TICKER + ENTER"
+          style={{background:"#0d1420",border:"1px solid #1a2535",color:"#e8f4f8",borderRadius:6,padding:"5px 10px",fontSize:9,fontFamily:"'Space Mono',monospace",width:180,outline:"none"}}/>
+        {tickers.map(t=>(
+          <button key={t} onClick={()=>setTickers(prev=>prev.filter(x=>x!==t))}
+            style={{background:"#1a2535",border:"1px solid #1a2535",color:"#a8c4d4",borderRadius:4,padding:"3px 7px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>
+            {t} ×
+          </button>
+        ))}
+      </div>
+
+      {loading
+        ? <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>◌ FETCHING CANDLE DATA…</div>
+        : syms.length < 2
+          ? <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>ADD AT LEAST 2 TICKERS WITH DATA</div>
+          : (
+            <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:16,overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",fontFamily:"'Space Mono',monospace",fontSize:9,minWidth:syms.length*72}}>
+                <thead>
+                  <tr>
+                    <td style={{width:70,color:"#6890a8",padding:"4px 6px"}}></td>
+                    {syms.map(s=><th key={s} style={{color:"#7dd3f0",padding:"4px 6px",fontWeight:700,textAlign:"center",width:72}}>{s}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {syms.map((row,i)=>(
+                    <tr key={row}>
+                      <td style={{color:"#7dd3f0",padding:"4px 6px",fontWeight:700,whiteSpace:"nowrap"}}>{row}</td>
+                      {matrix[i]?.map((val,j)=>(
+                        <td key={j} style={{
+                          background:corrColor(val),
+                          padding:"6px 4px",
+                          textAlign:"center",
+                          color: val===1?"#e8f4f8": val===null?"#6890a8": Math.abs(val)>0.5?"#e8f4f8":"#a8c4d4",
+                          fontWeight: val===1||Math.abs(val??0)>0.7?"700":"400",
+                          borderRadius:4,
+                          border:"1px solid #0d1420",
+                        }}>
+                          {val===1?"1.00":val===null?"—":val.toFixed(2)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {/* Legend */}
+              <div style={{display:"flex",gap:12,marginTop:12,alignItems:"center",flexWrap:"wrap"}}>
+                {[["Strong +","#7dd3f0",0.9],["Moderate +","#7dd3f066",0.5],["Neutral","#c8dff015",0],["Moderate −","#ff5f6d66",-0.5],["Strong −","#ff5f6d",-0.9]].map(([l,c])=>(
+                  <div key={l} style={{display:"flex",alignItems:"center",gap:5}}>
+                    <div style={{width:14,height:14,background:c,borderRadius:3}}/>
+                    <span style={{color:"#6890a8",fontSize:8}}>{l}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+      }
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPTIONS CHAIN VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+function OptionsView() {
+  const [input,    setInput]    = useState("AAPL");
+  const [symbol,   setSymbol]   = useState("AAPL");
+  const [data,     setData]     = useState(null);
+  const [loading,  setLoading]  = useState(false);
+  const [expIdx,   setExpIdx]   = useState(0);
+  const [side,     setSide]     = useState("both");
+  const [expDates, setExpDates] = useState([]);
+  const POPULAR = ["AAPL","TSLA","NVDA","SPY","QQQ","MSFT","AMZN","META","AMD"];
+
+  const search = async (sym) => {
+    const s = sym.trim().toUpperCase();
+    if (!s) return;
+    setLoading(true); setData(null); setExpIdx(0);
+    const raw = await fetchOptionsChain(s);
+    if (raw) { setData(raw); setExpDates(raw.expDates); setSymbol(s); }
+    setLoading(false);
+  };
+
+  const loadExp = async (idx) => {
+    setExpIdx(idx);
+    if (!expDates[idx] || !data) return;
+    setLoading(true);
+    const res = await fetchOptionsForExp(symbol, expDates[idx]);
+    setData(prev => ({...prev, calls: res.calls, puts: res.puts}));
+    setLoading(false);
+  };
+
+  useEffect(() => { search("AAPL"); }, []);
+
+  const fmtExp = ts => { const d=new Date(ts*1000); return `${d.toLocaleString('default',{month:'short'})} ${d.getDate()} '${String(d.getFullYear()).slice(-2)}`; };
+  const itm = (strike, isCall) => data?.price ? (isCall ? strike < data.price : strike > data.price) : false;
+
+  const calls = data?.calls ?? [];
+  const puts  = data?.puts  ?? [];
+  const strikes = [...new Set([...calls.map(c=>c.strike), ...puts.map(p=>p.strike)])].sort((a,b)=>a-b);
+
+  const callMap = Object.fromEntries(calls.map(c=>[c.strike, c]));
+  const putMap  = Object.fromEntries(puts.map(p=>[p.strike, p]));
+
+  return (
+    <div style={{padding:"0 4px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>OPTIONS CHAIN</div>
+          <div style={{color:"#6890a8",fontSize:8,marginTop:3,letterSpacing:1}}>
+            {data ? `● LIVE · ${symbol} · SPOT $${data.price?.toFixed(2)}` : "ENTER A TICKER TO LOAD CHAIN"}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())}
+            onKeyDown={e=>e.key==="Enter"&&search(input)}
+            placeholder="SYMBOL"
+            style={{background:"#0d1420",border:"1px solid #1a2535",color:"#e8f4f8",borderRadius:6,padding:"5px 10px",fontSize:9,fontFamily:"'Space Mono',monospace",width:100,outline:"none"}}/>
+          <button onClick={()=>search(input)} style={{background:MAIN_COL+"20",border:`1px solid ${MAIN_COL}`,color:MAIN_COL,borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>LOAD</button>
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+        {POPULAR.map(t=>(
+          <button key={t} onClick={()=>{setInput(t);search(t);}} style={{background:"none",border:"1px solid #1a2535",color:"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</button>
+        ))}
+      </div>
+
+      {loading && <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>◌ FETCHING OPTIONS CHAIN…</div>}
+
+      {!loading && data && (
+        <>
+          {/* Expiry selector */}
+          <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
+            {expDates.slice(0,12).map((ts,i)=>(
+              <button key={ts} onClick={()=>loadExp(i)} style={{background:expIdx===i?MAIN_COL+"20":"none",border:`1px solid ${expIdx===i?MAIN_COL:"#1a2535"}`,color:expIdx===i?MAIN_COL:"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{fmtExp(ts)}</button>
+            ))}
+          </div>
+          {/* Side toggle */}
+          <div style={{display:"flex",gap:4,marginBottom:12}}>
+            {[["both","CALLS + PUTS"],["calls","CALLS"],["puts","PUTS"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setSide(k)} style={{background:side===k?MAIN_COL+"20":"none",border:`1px solid ${side===k?MAIN_COL:"#1a2535"}`,color:side===k?MAIN_COL:"#a8c4d4",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{l}</button>
+            ))}
+          </div>
+
+          {/* Chain table */}
+          <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"'Space Mono',monospace",fontSize:9}}>
+              <thead>
+                <tr style={{borderBottom:"1px solid #1a2535"}}>
+                  {side!=="puts"&&<>
+                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>OI</th>
+                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>VOL</th>
+                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>IV</th>
+                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>BID</th>
+                    <th style={{color:"#7dd3f0",padding:"8px 10px",textAlign:"right"}}>ASK</th>
+                  </>}
+                  <th style={{color:"#e8f4f8",padding:"8px 12px",textAlign:"center",background:"#0a0e14",fontWeight:700}}>STRIKE</th>
+                  {side!=="calls"&&<>
+                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>BID</th>
+                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>ASK</th>
+                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>IV</th>
+                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>VOL</th>
+                    <th style={{color:"#ff5f6d",padding:"8px 10px",textAlign:"left"}}>OI</th>
+                  </>}
+                </tr>
+              </thead>
+              <tbody>
+                {strikes.map(strike=>{
+                  const c = callMap[strike];
+                  const p = putMap[strike];
+                  const atmish = data.price && Math.abs(strike - data.price) < (strikes[1]-strikes[0])*1.5;
+                  return (
+                    <tr key={strike} style={{borderBottom:"1px solid #111a24",background:atmish?"#7dd3f008":"transparent"}}>
+                      {side!=="puts"&&<>
+                        <td style={{color:"#6890a8",padding:"5px 10px",textAlign:"right"}}>{c?.openInterest?.toLocaleString()??"—"}</td>
+                        <td style={{color:"#a8c4d4",padding:"5px 10px",textAlign:"right"}}>{c?.volume?.toLocaleString()??"—"}</td>
+                        <td style={{color:"#c8dff0",padding:"5px 10px",textAlign:"right"}}>{c?.impliedVolatility!=null?`${(c.impliedVolatility*100).toFixed(1)}%`:"—"}</td>
+                        <td style={{color:"#7dd3f0",padding:"5px 10px",textAlign:"right"}}>{c?.bid?.toFixed(2)??"—"}</td>
+                        <td style={{color:"#7dd3f0",padding:"5px 10px",textAlign:"right",background:itm(strike,true)?"#7dd3f008":"transparent"}}>{c?.ask?.toFixed(2)??"—"}</td>
+                      </>}
+                      <td style={{color:"#e8f4f8",padding:"5px 12px",textAlign:"center",background:"#0a0e14",fontWeight:700,fontSize:10}}>{strike}</td>
+                      {side!=="calls"&&<>
+                        <td style={{color:"#ff5f6d",padding:"5px 10px",textAlign:"left",background:itm(strike,false)?"#ff5f6d08":"transparent"}}>{p?.bid?.toFixed(2)??"—"}</td>
+                        <td style={{color:"#ff5f6d",padding:"5px 10px",textAlign:"left"}}>{p?.ask?.toFixed(2)??"—"}</td>
+                        <td style={{color:"#c8dff0",padding:"5px 10px",textAlign:"left"}}>{p?.impliedVolatility!=null?`${(p.impliedVolatility*100).toFixed(1)}%`:"—"}</td>
+                        <td style={{color:"#a8c4d4",padding:"5px 10px",textAlign:"left"}}>{p?.volume?.toLocaleString()??"—"}</td>
+                        <td style={{color:"#6890a8",padding:"5px 10px",textAlign:"left"}}>{p?.openInterest?.toLocaleString()??"—"}</td>
+                      </>}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{color:"#6890a8",fontSize:8,marginTop:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
+            ITM HIGHLIGHTED · CALLS LEFT (BLUE) · PUTS RIGHT (RED) · DATA VIA YAHOO FINANCE
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EARNINGS VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+function EarningsView() {
+  const [input,   setInput]   = useState("AAPL");
+  const [symbol,  setSymbol]  = useState("AAPL");
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(false);
+  const POPULAR = ["AAPL","MSFT","NVDA","META","GOOGL","AMZN","TSLA","JPM","V","NFLX"];
+
+  const search = async (sym) => {
+    const s = sym.trim().toUpperCase();
+    if (!s) return;
+    setLoading(true); setData(null);
+    const raw = await fetchEarningsCalendar(s);
+    if (raw) { setData(raw); setSymbol(s); }
+    setLoading(false);
+  };
+
+  useEffect(() => { search("AAPL"); }, []);
+
+  const beatColor = (actual, estimate) => {
+    if (actual == null || estimate == null) return "#6890a8";
+    return actual >= estimate ? "#7dd3f0" : "#ff5f6d";
+  };
+  const beatLabel = (actual, estimate) => {
+    if (actual == null) return "—";
+    if (estimate == null) return actual.toFixed(2);
+    const diff = actual - estimate;
+    return diff >= 0 ? `BEAT +${diff.toFixed(2)}` : `MISS ${diff.toFixed(2)}`;
+  };
+
+  const history = data?.earningsHistory ?? [];
+  const chart   = data?.earningsChart;
+  const next    = data?.nextEarnings;
+
+  // Build quarterly EPS series from earningsChart
+  const epsSeries = chart?.quarterly?.map(q => ({
+    date:     q.date,
+    actual:   q.actual?.raw ?? null,
+    estimate: q.estimate?.raw ?? null,
+    surprise: q.actual != null && q.estimate != null ? +((q.actual.raw - q.estimate.raw) / Math.abs(q.estimate.raw) * 100).toFixed(1) : null,
+  })) ?? [];
+
+  const annSeries = chart?.yearly?.map(y => ({
+    date:     y.date,
+    actual:   y.earnings?.raw ?? null,
+    revenue:  y.revenue?.raw != null ? +(y.revenue.raw/1e9).toFixed(1) : null,
+  })) ?? [];
+
+  return (
+    <div style={{padding:"0 4px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>EARNINGS — ERN</div>
+          <div style={{color:"#6890a8",fontSize:8,marginTop:3,letterSpacing:1}}>{data?"● LIVE · EPS HISTORY & ESTIMATES":"SEARCH A TICKER"}</div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())}
+            onKeyDown={e=>e.key==="Enter"&&search(input)}
+            placeholder="SYMBOL"
+            style={{background:"#0d1420",border:"1px solid #1a2535",color:"#e8f4f8",borderRadius:6,padding:"5px 10px",fontSize:9,fontFamily:"'Space Mono',monospace",width:100,outline:"none"}}/>
+          <button onClick={()=>search(input)} style={{background:MAIN_COL+"20",border:`1px solid ${MAIN_COL}`,color:MAIN_COL,borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>LOAD</button>
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        {POPULAR.map(t=>(
+          <button key={t} onClick={()=>{setInput(t);search(t);}} style={{background:"none",border:"1px solid #1a2535",color:"#a8c4d4",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{t}</button>
+        ))}
+      </div>
+
+      {loading && <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>◌ FETCHING EARNINGS DATA…</div>}
+
+      {!loading && data && (
+        <div style={{display:"grid",gap:14}}>
+          {/* Next earnings */}
+          {next?.earningsDate && (
+            <div style={{background:"#0d1420",border:"1px solid #7dd3f044",borderRadius:12,padding:"14px 18px",display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
+              <div>
+                <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>NEXT EARNINGS</div>
+                <div style={{color:"#7dd3f0",fontSize:15,fontFamily:"'Space Mono',monospace",fontWeight:700}}>
+                  {new Date(next.earningsDate[0]*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                </div>
+              </div>
+              {next.earningsCallTime && (
+                <div>
+                  <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>TIMING</div>
+                  <div style={{color:"#c8dff0",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{next.earningsCallTime==="BMO"?"BEFORE MARKET OPEN":"AFTER MARKET CLOSE"}</div>
+                </div>
+              )}
+              {next.epsEstimate?.raw != null && (
+                <div>
+                  <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>EPS ESTIMATE</div>
+                  <div style={{color:"#c8dff0",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700}}>${next.epsEstimate.raw.toFixed(2)}</div>
+                </div>
+              )}
+              {next.revenueEstimate?.raw != null && (
+                <div>
+                  <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>REV ESTIMATE</div>
+                  <div style={{color:"#c8dff0",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700}}>${(next.revenueEstimate.raw/1e9).toFixed(1)}B</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Quarterly EPS chart */}
+          {epsSeries.length > 0 && (
+            <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"16px 18px"}}>
+              <div style={{color:"#6890a8",fontSize:8,letterSpacing:1.5,marginBottom:12}}>QUARTERLY EPS · ACTUAL vs ESTIMATE</div>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={epsSeries} margin={{top:24,right:8,bottom:0,left:0}} barGap={2} barCategoryGap="25%">
+                  <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
+                  <XAxis dataKey="date" tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
+                  <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}`}/>
+                  <Tooltip content={({active,payload,label})=>{
+                    if(!active||!payload?.length) return null;
+                    const d=payload[0]?.payload;
+                    return(
+                      <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"8px 12px",fontFamily:"'Space Mono',monospace",fontSize:9}}>
+                        <div style={{color:"#c8dff0",marginBottom:4}}>{label}</div>
+                        <div style={{color:"#7dd3f0"}}>Actual: ${d.actual?.toFixed(2)??'—'}</div>
+                        <div style={{color:"#6890a8"}}>Est: ${d.estimate?.toFixed(2)??'—'}</div>
+                        {d.surprise!=null&&<div style={{color:d.surprise>=0?"#7dd3f0":"#ff5f6d",marginTop:2}}>Surprise: {d.surprise>=0?"+":""}{d.surprise}%</div>}
+                      </div>
+                    );
+                  }}/>
+                  <Bar dataKey="estimate" fill="#6890a833" stroke="#6890a8" strokeWidth={1} radius={[2,2,0,0]} maxBarSize={30}
+                    label={{position:"top",fontSize:7,fill:"#6890a8",fontFamily:"'Space Mono',monospace",formatter:v=>v?`$${v.toFixed(2)}`:""}}/>
+                  <Bar dataKey="actual" maxBarSize={30} radius={[2,2,0,0]}
+                    shape={(props)=>{
+                      const {x,y,width,height,payload}=props;
+                      const beat=payload.actual!=null&&payload.estimate!=null&&payload.actual>=payload.estimate;
+                      const col=payload.actual==null?"#6890a8":beat?"#7dd3f0":"#ff5f6d";
+                      return(
+                        <g>
+                          <rect x={x} y={y} width={width} height={height} fill={col+"55"} stroke={col} strokeWidth={1.5} rx={2}/>
+                          {payload.actual!=null&&<text x={x+width/2} y={y-5} textAnchor="middle" fill={col} fontSize={7} fontFamily="'Space Mono',monospace">${payload.actual.toFixed(2)}</text>}
+                        </g>
+                      );
+                    }}/>
+                </BarChart>
+              </ResponsiveContainer>
+              <div style={{display:"flex",gap:14,marginTop:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"#7dd3f055",border:"1px solid #7dd3f0",borderRadius:2}}/><span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>BEAT</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"#ff5f6d55",border:"1px solid #ff5f6d",borderRadius:2}}/><span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>MISS</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"#6890a833",border:"1px solid #6890a8",borderRadius:2}}/><span style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}}>ESTIMATE</span></div>
+              </div>
+            </div>
+          )}
+
+          {/* History table */}
+          {history.length > 0 && (
+            <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
+              <div style={{color:"#6890a8",fontSize:8,letterSpacing:1.5,padding:"12px 16px",borderBottom:"1px solid #1a2535"}}>EARNINGS HISTORY · BEAT / MISS RECORD</div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"'Space Mono',monospace",fontSize:9}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid #111a24"}}>
+                    {["PERIOD","ACTUAL EPS","ESTIMATE","SURPRISE","SURPRISE %"].map(h=>(
+                      <th key={h} style={{color:"#6890a8",padding:"8px 14px",textAlign:"right",fontWeight:400,letterSpacing:1}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...history].reverse().map((h,i)=>{
+                    const act = h.epsActual?.raw;
+                    const est = h.epsEstimate?.raw;
+                    const diff = act!=null&&est!=null ? +(act-est).toFixed(3) : null;
+                    const pct  = diff!=null&&est!=0   ? +((diff/Math.abs(est))*100).toFixed(1) : null;
+                    const col  = diff==null?"#6890a8":diff>=0?"#7dd3f0":"#ff5f6d";
+                    return (
+                      <tr key={i} style={{borderBottom:"1px solid #111a24",background:i%2===0?"#0d142008":"transparent"}}>
+                        <td style={{color:"#c8dff0",padding:"7px 14px",textAlign:"right"}}>{h.period??h.quarter}</td>
+                        <td style={{color:"#e8f4f8",padding:"7px 14px",textAlign:"right",fontWeight:700}}>{act!=null?`$${act.toFixed(2)}`:"—"}</td>
+                        <td style={{color:"#6890a8",padding:"7px 14px",textAlign:"right"}}>{est!=null?`$${est.toFixed(2)}`:"—"}</td>
+                        <td style={{color:col,padding:"7px 14px",textAlign:"right"}}>{diff!=null?`${diff>=0?"+":""}${diff}`:"—"}</td>
+                        <td style={{color:col,padding:"7px 14px",textAlign:"right",fontWeight:700}}>{pct!=null?`${pct>=0?"+":""}${pct}%`:"—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ECO CALENDAR VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+const ECO_EVENTS = [
+  // US events with FRED series IDs where available
+  {title:"Unemployment Rate",          country:"US", impact:"high",   fred:"UNRATE",   desc:"Monthly US unemployment rate"},
+  {title:"CPI YoY",                    country:"US", impact:"high",   fred:"CPIAUCSL", desc:"Consumer Price Index year-over-year"},
+  {title:"Fed Funds Rate",             country:"US", impact:"high",   fred:"FEDFUNDS", desc:"Federal funds effective rate"},
+  {title:"GDP Growth Rate",            country:"US", impact:"high",   fred:"A191RL1Q225SBEA", desc:"Real GDP % change QoQ"},
+  {title:"Core PCE",                   country:"US", impact:"high",   fred:"PCEPILFE", desc:"Core personal consumption expenditures"},
+  {title:"Retail Sales MoM",           country:"US", impact:"medium", fred:"RSXFS",    desc:"Advance retail sales month-over-month"},
+  {title:"ISM Manufacturing PMI",      country:"US", impact:"medium", fred:"MANEMP",   desc:"Manufacturing employment"},
+  {title:"10Y Treasury Yield",         country:"US", impact:"medium", fred:"DGS10",    desc:"10-year treasury constant maturity rate"},
+  {title:"Initial Jobless Claims",     country:"US", impact:"medium", fred:"ICSA",     desc:"Weekly initial unemployment insurance claims"},
+  {title:"Housing Starts",             country:"US", impact:"low",    fred:"HOUST",    desc:"New privately-owned housing units started"},
+  {title:"PPI YoY",                    country:"US", impact:"medium", fred:null,       desc:"Producer Price Index year-over-year"},
+  {title:"Nonfarm Payrolls",           country:"US", impact:"high",   fred:"PAYEMS",   desc:"Total nonfarm payroll employees"},
+];
+
+const IMPACT_COL = {high:"#ff5f6d", medium:"#f59e0b", low:"#7dd3f0"};
+
+function EcoCalView() {
+  const [selected, setSelected] = useState(ECO_EVENTS[0]);
+  const [seriesData, setSeriesData] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const loadSeries = useCallback(async (event) => {
+    if (!event.fred) return;
+    if (seriesData[event.fred]) return; // cached
+    setLoading(true);
+    const data = await fetchFredSeries(event.fred);
+    if (data) setSeriesData(prev => ({...prev, [event.fred]: data}));
+    setLoading(false);
+  }, [seriesData]);
+
+  useEffect(() => { loadSeries(ECO_EVENTS[0]); }, []);
+
+  const handleSelect = (ev) => { setSelected(ev); loadSeries(ev); };
+
+  const series = selected.fred ? seriesData[selected.fred] : null;
+  const latest = series?.[series.length-1];
+  const prev   = series?.[series.length-2];
+  const change = latest && prev ? +(latest.value - prev.value).toFixed(3) : null;
+
+  return (
+    <div style={{padding:"0 4px"}}>
+      <div style={{marginBottom:16}}>
+        <div style={{color:"#e8f4f8",fontSize:13,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:2}}>ECONOMIC CALENDAR — ECST</div>
+        <div style={{color:"#6890a8",fontSize:8,marginTop:3,letterSpacing:1}}>● LIVE DATA VIA FRED · ST. LOUIS FEDERAL RESERVE</div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:14}}>
+        {/* Event list */}
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {ECO_EVENTS.map(ev=>(
+            <button key={ev.title} onClick={()=>handleSelect(ev)}
+              style={{background:selected.title===ev.title?"#152030":"#0d1420",border:`1px solid ${selected.title===ev.title?MAIN_COL:"#1a2535"}`,borderRadius:8,padding:"9px 12px",cursor:"pointer",textAlign:"left",transition:"all 0.12s"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                <span style={{color:selected.title===ev.title?"#e8f4f8":"#c8dff0",fontSize:9,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{ev.title}</span>
+                <span style={{color:IMPACT_COL[ev.impact],fontSize:7,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>{ev.impact.toUpperCase()}</span>
+              </div>
+              <div style={{color:"#6890a8",fontSize:7,fontFamily:"'Space Mono',monospace"}}>{ev.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Detail panel */}
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {/* Header metrics */}
+          <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"16px 20px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+              <div>
+                <div style={{color:"#e8f4f8",fontSize:15,fontFamily:"'Space Mono',monospace",fontWeight:700,letterSpacing:1}}>{selected.title}</div>
+                <div style={{color:"#6890a8",fontSize:8,marginTop:3}}>{selected.desc}</div>
+              </div>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <span style={{color:IMPACT_COL[selected.impact],background:IMPACT_COL[selected.impact]+"22",fontSize:8,letterSpacing:1,padding:"2px 8px",borderRadius:4,fontFamily:"'Space Mono',monospace"}}>{selected.impact.toUpperCase()} IMPACT</span>
+                <span style={{color:"#6890a8",background:"#1a2535",fontSize:8,padding:"2px 8px",borderRadius:4,fontFamily:"'Space Mono',monospace"}}>{selected.country}</span>
+              </div>
+            </div>
+            {latest && (
+              <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>LATEST</div>
+                  <div style={{color:"#e8f4f8",fontSize:20,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{latest.value.toFixed(2)}</div>
+                  <div style={{color:"#6890a8",fontSize:8,marginTop:2}}>{latest.date}</div>
+                </div>
+                {prev && (
+                  <div>
+                    <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>PREVIOUS</div>
+                    <div style={{color:"#c8dff0",fontSize:16,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{prev.value.toFixed(2)}</div>
+                    <div style={{color:"#6890a8",fontSize:8,marginTop:2}}>{prev.date}</div>
+                  </div>
+                )}
+                {change!=null && (
+                  <div>
+                    <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>CHANGE</div>
+                    <div style={{color:change>=0?"#7dd3f0":"#ff5f6d",fontSize:16,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{change>=0?"+":""}{change}</div>
+                  </div>
+                )}
+                {selected.fred && (
+                  <div>
+                    <div style={{color:"#6890a8",fontSize:8,letterSpacing:1,marginBottom:4}}>FRED ID</div>
+                    <div style={{color:"#6890a8",fontSize:11,fontFamily:"'Space Mono',monospace"}}>{selected.fred}</div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!selected.fred && <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace"}}>No FRED series available for this indicator</div>}
+            {loading && <div style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace",marginTop:8}}>◌ FETCHING FRED DATA…</div>}
+          </div>
+
+          {/* Trend chart */}
+          {series && series.length > 3 && (
+            <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,padding:"16px 18px"}}>
+              <div style={{color:"#6890a8",fontSize:8,letterSpacing:1.5,marginBottom:12}}>HISTORICAL TREND · LAST {series.length} READINGS</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={series} margin={{top:8,right:8,bottom:0,left:0}}>
+                  <defs>
+                    <linearGradient id="ecoGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={MAIN_COL} stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor={MAIN_COL} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
+                  <XAxis dataKey="date" tick={{fill:"#4a6a85",fontSize:7,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}
+                    tickFormatter={v=>v.slice(0,7)} interval={Math.floor(series.length/6)}/>
+                  <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={40} domain={["auto","auto"]}/>
+                  <Tooltip content={({active,payload})=>{
+                    if(!active||!payload?.length) return null;
+                    return(
+                      <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"8px 12px",fontFamily:"'Space Mono',monospace",fontSize:9}}>
+                        <div style={{color:"#6890a8",marginBottom:2}}>{payload[0]?.payload?.date}</div>
+                        <div style={{color:MAIN_COL,fontWeight:700}}>{payload[0]?.value?.toFixed(3)}</div>
+                      </div>
+                    );
+                  }}/>
+                  <Area type="monotone" dataKey="value" stroke={MAIN_COL} strokeWidth={1.5} fill="url(#ecoGrad)" dot={false}/>
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LoadingScreen({progress,label}){
   return(
     <div style={{minHeight:"100vh",background:"#0a0e14",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:20}}>
+      <div style={{color:"#7dd3f0",fontFamily:"'Space Mono',monospace",fontSize:13,fontWeight:700,letterSpacing:3}}>MARKETPULSE</div>
       <div style={{color:"#6890a8",fontFamily:"'Space Mono',monospace",fontSize:11,letterSpacing:3}}>{label}</div>
       <div style={{width:240,height:2,background:"#1a2535",borderRadius:2,overflow:"hidden"}}>
         <div style={{height:"100%",width:`${progress}%`,background:"#7dd3f0",borderRadius:2,transition:"width 0.3s"}}/>
@@ -4622,1006 +5484,6 @@ function LoadingScreen({progress,label}){
 // ─────────────────────────────────────────────────────────────────────────────
 // APP
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CHART TAB (inlined)
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS & CONFIG
-// ─────────────────────────────────────────────────────────────────────────────
-const C_BG        = "#0a0e14";
-const PANEL_BG  = "#0d1420";
-const C_BORDER    = "#1a2535";
-const C_MAIN_COL  = "#7dd3f0";
-const C_TEXT_DIM  = "#162535";
-const C_TEXT_MID  = "#6890a8";
-const C_TEXT_MAIN = "#a8b8c8";
-const C_UP_COL    = "#7dd3f0";
-const C_DN_COL    = "#ff5f6d";
-const C_FONT      = "'Space Mono', monospace";
-
-const TOOLS = [
-  { id:"cursor",    icon:"↖",  label:"Select / Move"         },
-  { id:"trendline", icon:"╱",  label:"Trend Line"            },
-  { id:"hline",     icon:"─",  label:"Horizontal Line"       },
-  { id:"rect",      icon:"▭",  label:"Rectangle Zone"        },
-  { id:"pen",       icon:"✏",  label:"Free Draw / Curve"     },
-  { id:"measure",   icon:"↔",  label:"Measure % Move"        },
-  { id:"text",      icon:"T",  label:"Text Box"              },
-];
-
-const CHART_TIMEFRAMES = [
-  { label:"1D",  interval:"5m",  range:"1d",   days:1,   barLabel:"5m"  },
-  { label:"1W",  interval:"1h",  range:"5d",   days:7,   barLabel:"1h"  },
-  { label:"1M",  interval:"1d",  range:"1mo",  days:30,  barLabel:"1D"  },
-  { label:"3M",  interval:"1d",  range:"3mo",  days:90,  barLabel:"1D"  },
-  { label:"6M",  interval:"1d",  range:"6mo",  days:180, barLabel:"1D"  },
-  { label:"1Y",  interval:"1wk", range:"1y",   days:365, barLabel:"1W"  },
-  { label:"2Y",  interval:"1wk", range:"2y",   days:730, barLabel:"1W"  },
-];
-
-const MA_COLORS = { 20:"#b8e8ff", 50:"#c8dff0", 200:"#c8dff0" };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SIMULATED OHLCV DATA
-// ─────────────────────────────────────────────────────────────────────────────
-function genOHLCV(base, points, vol = 0.012) {
-  const bars = [];
-  let close = base * (0.88 + Math.random() * 0.12);
-  for (let i = 0; i < points; i++) {
-    const open  = close;
-    const move  = (Math.random() - 0.488) * vol;
-    close = Math.max(0.01, open * (1 + move));
-    const hi  = Math.max(open, close) * (1 + Math.random() * vol * 0.5);
-    const lo  = Math.min(open, close) * (1 - Math.random() * vol * 0.5);
-    const vol_ = Math.round(500000 + Math.random() * 4500000);
-    bars.push({ t: i, open: +open.toFixed(4), high: +hi.toFixed(4), low: +lo.toFixed(4), close: +close.toFixed(4), volume: vol_ });
-  }
-  bars[bars.length - 1].close = +( base * (0.97 + Math.random() * 0.06) ).toFixed(4);
-  return bars;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// API FETCH — Yahoo Finance
-// ─────────────────────────────────────────────────────────────────────────────
-async function fetchOHLCV(symbol, interval, range) {
-  try {
-    const ySym = toYahooSymbol(symbol);
-    const r = await fetch(
-      `${YF_PROXY}?path=v8/finance/chart/${encodeURIComponent(ySym)}&interval=${interval}&range=${range}`
-    );
-    const d = await r.json();
-    const result = d?.chart?.result?.[0];
-    if (!result?.timestamp || !result?.indicators?.quote?.[0]) return null;
-    const q = result.indicators.quote[0];
-    return result.timestamp.map((t, i) => ({
-      t: i, ts: t,
-      open:   q.open[i]   != null ? +q.open[i].toFixed(4)   : null,
-      high:   q.high[i]   != null ? +q.high[i].toFixed(4)   : null,
-      low:    q.low[i]    != null ? +q.low[i].toFixed(4)     : null,
-      close:  q.close[i]  != null ? +q.close[i].toFixed(4)  : null,
-      volume: q.volume[i] ?? 0,
-    })).filter(b => b.close != null);
-  } catch { return null; }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// INDICATOR MATH
-// ─────────────────────────────────────────────────────────────────────────────
-function calcMA(bars, period) {
-  return bars.map((b, i) => {
-    if (i < period - 1) return null;
-    const avg = bars.slice(i - period + 1, i + 1).reduce((s, x) => s + x.close, 0) / period;
-    return +avg.toFixed(4);
-  });
-}
-
-function calcRSI(bars, period = 14) {
-  const rsi = Array(bars.length).fill(null);
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const d = bars[i].close - bars[i - 1].close;
-    if (d > 0) gains += d; else losses -= d;
-  }
-  let avgG = gains / period, avgL = losses / period;
-  rsi[period] = avgL === 0 ? 100 : +(100 - 100 / (1 + avgG / avgL)).toFixed(2);
-  for (let i = period + 1; i < bars.length; i++) {
-    const d = bars[i].close - bars[i - 1].close;
-    const g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
-    avgG = (avgG * (period - 1) + g) / period;
-    avgL = (avgL * (period - 1) + l) / period;
-    rsi[i] = avgL === 0 ? 100 : +(100 - 100 / (1 + avgG / avgL)).toFixed(2);
-  }
-  return rsi;
-}
-
-function calcMACD(bars, fast = 12, slow = 26, signal = 9) {
-  function ema(data, period) {
-    const k = 2 / (period + 1), out = Array(data.length).fill(null);
-    let start = period - 1;
-    let sum = 0;
-    for (let i = 0; i < period; i++) sum += data[i];
-    out[start] = sum / period;
-    for (let i = start + 1; i < data.length; i++)
-      out[i] = +(data[i] * k + out[i - 1] * (1 - k)).toFixed(4);
-    return out;
-  }
-  const closes = bars.map(b => b.close);
-  const emaF   = ema(closes, fast), emaS = ema(closes, slow);
-  const macd   = emaF.map((v, i) => v !== null && emaS[i] !== null ? +(v - emaS[i]).toFixed(4) : null);
-  const validMacd = macd.map(v => v ?? 0);
-  const sig    = ema(validMacd, signal);
-  const hist   = macd.map((v, i) => v !== null && sig[i] !== null ? +(v - sig[i]).toFixed(4) : null);
-  return { macd, signal: sig, histogram: hist };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CANVAS CHART ENGINE
-// ─────────────────────────────────────────────────────────────────────────────
-function ChartCanvas({ bars, drawings, setDrawings, tool, mas, showVolume, showRSI, showMACD, chartStyle }) {
-  const canvasRef   = useRef(null);
-  const overlayRef  = useRef(null);
-  const stateRef    = useRef({ bars:[], viewStart:0, viewEnd:0, priceMin:0, priceMax:0 });
-  const drawingRef  = useRef(null);  // current in-progress drawing
-  const hoveredRef  = useRef(null);
-  const selectedRef = useRef(null);
-  const dragRef     = useRef(null);
-  const [tooltip,   setTooltip] = useState(null);
-  const [editText,  setEditText] = useState(null);
-  const [, forceRender] = useState(0);
-
-  const CHART_PADDING = { top: 20, right: 60, bottom: 28, left: 8 };
-  const VOL_H   = showVolume ? 60  : 0;
-  const RSI_H   = showRSI   ? 80  : 0;
-  const MACD_H  = showMACD  ? 80  : 0;
-  const PANEL_GAP = 8;
-
-  // ── coordinate helpers ──
-  const getCanvasDims = useCallback(() => {
-    const c = canvasRef.current;
-    if (!c) return { W: 800, H: 500, mainH: 300 };
-    const W = c.width, H = c.height;
-    const extras = (showVolume ? VOL_H + PANEL_GAP : 0) + (showRSI ? RSI_H + PANEL_GAP : 0) + (showMACD ? MACD_H + PANEL_GAP : 0);
-    const mainH = H - CHART_PADDING.top - CHART_PADDING.bottom - extras;
-    return { W, H, mainH, extras };
-  }, [showVolume, showRSI, showMACD]);
-
-  const barsToView = useCallback((bars, viewStart, viewEnd) => {
-    return bars.slice(Math.max(0, viewStart), Math.min(bars.length, viewEnd + 1));
-  }, []);
-
-  const priceToY = useCallback((price, mainH, priceMin, priceMax) => {
-    const { top } = CHART_PADDING;
-    const range = priceMax - priceMin || 1;
-    return top + mainH * (1 - (price - priceMin) / range);
-  }, []);
-
-  const xToBar = useCallback((x, bars, W) => {
-    const { left, right } = CHART_PADDING;
-    const chartW = W - left - right;
-    const s = stateRef.current;
-    const visibleBars = s.viewEnd - s.viewStart;
-    const barW = chartW / (visibleBars || 1);
-    return Math.round(s.viewStart + (x - left) / barW);
-  }, []);
-
-  const barToX = useCallback((barIdx, W) => {
-    const { left, right } = CHART_PADDING;
-    const chartW = W - left - right;
-    const s = stateRef.current;
-    const visibleBars = s.viewEnd - s.viewStart;
-    const barW = chartW / (visibleBars || 1);
-    return left + (barIdx - s.viewStart + 0.5) * barW;
-  }, []);
-
-  const yToPrice = useCallback((y, mainH, priceMin, priceMax) => {
-    const { top } = CHART_PADDING;
-    const range = priceMax - priceMin || 1;
-    return priceMax - ((y - top) / mainH) * range;
-  }, []);
-
-  // ── main draw ──
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !bars?.length) return;
-    const ctx = canvas.getContext("2d");
-    const { W, H, mainH } = getCanvasDims();
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = C_BG;
-    ctx.fillRect(0, 0, W, H);
-
-    const s = stateRef.current;
-    s.bars = bars;
-    if (s.viewEnd === 0 || s.viewEnd > bars.length) {
-      s.viewEnd = bars.length;
-      s.viewStart = Math.max(0, bars.length - 120);
-    }
-
-    const visiBars = barsToView(bars, s.viewStart, s.viewEnd);
-    if (!visiBars.length) return;
-
-    const priceMin = Math.min(...visiBars.map(b => b.low))   * 0.999;
-    const priceMax = Math.max(...visiBars.map(b => b.high))  * 1.001;
-    s.priceMin = priceMin; s.priceMax = priceMax;
-
-    const { left, right, top, bottom } = CHART_PADDING;
-    const chartW = W - left - right;
-    const barW   = chartW / (s.viewEnd - s.viewStart);
-    const candleW = Math.max(1, barW * 0.6);
-
-    // ── grid ──
-    ctx.strokeStyle = "#1a2535";
-    ctx.lineWidth = 1;
-    const priceTicks = 6;
-    for (let i = 0; i <= priceTicks; i++) {
-      const p = priceMin + (priceMax - priceMin) * i / priceTicks;
-      const y = priceToY(p, mainH, priceMin, priceMax);
-      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(W - right, y); ctx.stroke();
-      ctx.fillStyle = C_TEXT_DIM;
-      ctx.font = `9px ${C_FONT}`;
-      ctx.textAlign = "left";
-      const label = p >= 1000 ? p.toFixed(2) : p >= 1 ? p.toFixed(4) : p.toFixed(6);
-      ctx.fillText(label, W - right + 4, y + 3);
-    }
-
-    // ── candles / line ──
-    visiBars.forEach((bar, vi) => {
-      const bi = s.viewStart + vi;
-      const x  = barToX(bi, W);
-      const up = bar.close >= bar.open;
-      const col = up ? C_UP_COL : C_DN_COL;
-
-      if (chartStyle === "line") {
-        if (vi > 0) {
-          const prev = visiBars[vi - 1];
-          const px = barToX(s.viewStart + vi - 1, W);
-          ctx.strokeStyle = C_MAIN_COL;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(px, priceToY(prev.close, mainH, priceMin, priceMax));
-          ctx.lineTo(x,  priceToY(bar.close,  mainH, priceMin, priceMax));
-          ctx.stroke();
-        }
-      } else {
-        // wick
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x, priceToY(bar.high, mainH, priceMin, priceMax));
-        ctx.lineTo(x, priceToY(bar.low,  mainH, priceMin, priceMax));
-        ctx.stroke();
-        // body
-        const bodyTop    = priceToY(Math.max(bar.open, bar.close), mainH, priceMin, priceMax);
-        const bodyBottom = priceToY(Math.min(bar.open, bar.close), mainH, priceMin, priceMax);
-        const bodyH = Math.max(1, bodyBottom - bodyTop);
-        ctx.fillStyle = up ? C_UP_COL + "cc" : C_DN_COL + "cc";
-        ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(x - candleW / 2, bodyTop, candleW, bodyH);
-      }
-    });
-
-    // ── moving averages ──
-    mas.forEach(({ period, visible }) => {
-      if (!visible) return;
-      const maVals = calcMA(bars, period);
-      const col = MA_COLORS[period] || "#fff";
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      let started = false;
-      for (let bi = s.viewStart; bi <= s.viewEnd && bi < bars.length; bi++) {
-        const v = maVals[bi];
-        if (v === null) continue;
-        const x = barToX(bi, W);
-        const y = priceToY(v, mainH, priceMin, priceMax);
-        if (!started) { ctx.moveTo(x, y); started = true; }
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    });
-
-    // ── volume ──
-    if (showVolume) {
-      const volTop = top + mainH + PANEL_GAP;
-      const volH   = VOL_H - PANEL_GAP;
-      ctx.fillStyle = "#1a2535";
-      ctx.fillRect(left, volTop, chartW, volH);
-      const maxVol = Math.max(...visiBars.map(b => b.volume || 0));
-      visiBars.forEach((bar, vi) => {
-        const bi = s.viewStart + vi;
-        const x  = barToX(bi, W);
-        const up = bar.close >= bar.open;
-        const vH = maxVol > 0 ? ((bar.volume || 0) / maxVol) * volH : 0;
-        ctx.fillStyle = up ? C_UP_COL + "55" : C_DN_COL + "55";
-        ctx.fillRect(x - candleW / 2, volTop + volH - vH, candleW, vH);
-      });
-      ctx.fillStyle = C_TEXT_DIM;
-      ctx.font = `8px ${C_FONT}`;
-      ctx.textAlign = "right";
-      ctx.fillText("VOL", W - right + 2, volTop + 10);
-    }
-
-    // ── RSI ──
-    if (showRSI) {
-      const rsiTop = top + mainH + (showVolume ? VOL_H + PANEL_GAP : 0) + PANEL_GAP;
-      const rsiH   = RSI_H - PANEL_GAP;
-      ctx.fillStyle = "#0a0e14";
-      ctx.fillRect(left, rsiTop, chartW, rsiH);
-      ctx.strokeStyle = C_BORDER;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(left, rsiTop, chartW, rsiH);
-
-      const rsiVals = calcRSI(bars, 14);
-      [30, 50, 70].forEach(lvl => {
-        const y = rsiTop + rsiH * (1 - lvl / 100);
-        ctx.strokeStyle = lvl === 50 ? "#162535" : lvl === 70 ? "#ff5f6d33" : "#7dd3f033";
-        ctx.lineWidth = 0.5;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(W - right, y); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = C_TEXT_DIM; ctx.font = `8px ${C_FONT}`; ctx.textAlign = "left";
-        ctx.fillText(lvl, W - right + 4, y + 3);
-      });
-
-      ctx.strokeStyle = "#b8e8ff"; ctx.lineWidth = 1.2; ctx.beginPath();
-      let rsiStarted = false;
-      for (let bi = s.viewStart; bi <= s.viewEnd && bi < bars.length; bi++) {
-        const v = rsiVals[bi]; if (v === null) continue;
-        const x = barToX(bi, W);
-        const y = rsiTop + rsiH * (1 - v / 100);
-        if (!rsiStarted) { ctx.moveTo(x, y); rsiStarted = true; } else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.fillStyle = C_TEXT_DIM; ctx.font = `8px ${C_FONT}`; ctx.textAlign = "right";
-      ctx.fillText("RSI 14", W - right + 2, rsiTop + 10);
-    }
-
-    // ── MACD ──
-    if (showMACD) {
-      const macdTop = top + mainH
-        + (showVolume ? VOL_H + PANEL_GAP : 0)
-        + (showRSI    ? RSI_H + PANEL_GAP : 0)
-        + PANEL_GAP;
-      const macdH = MACD_H - PANEL_GAP;
-      const { macd, signal: sig, histogram } = calcMACD(bars);
-
-      const visMacd = bars.slice(s.viewStart, s.viewEnd + 1).map((_, i) => histogram[s.viewStart + i]).filter(v => v !== null);
-      const maxAbs  = Math.max(0.0001, ...visMacd.map(v => Math.abs(v)));
-
-      ctx.fillStyle = "#0a0e14"; ctx.fillRect(left, macdTop, chartW, macdH);
-      ctx.strokeStyle = C_BORDER; ctx.lineWidth = 1; ctx.strokeRect(left, macdTop, chartW, macdH);
-
-      const zeroY = macdTop + macdH / 2;
-      ctx.strokeStyle = "#162535"; ctx.lineWidth = 0.5; ctx.setLineDash([2, 2]);
-      ctx.beginPath(); ctx.moveTo(left, zeroY); ctx.lineTo(W - right, zeroY); ctx.stroke();
-      ctx.setLineDash([]);
-
-      // histogram
-      for (let bi = s.viewStart; bi <= s.viewEnd && bi < bars.length; bi++) {
-        const v = histogram[bi]; if (v === null) continue;
-        const x  = barToX(bi, W);
-        const hh = (Math.abs(v) / maxAbs) * (macdH / 2 - 4);
-        ctx.fillStyle = v >= 0 ? C_UP_COL + "66" : C_DN_COL + "66";
-        ctx.fillRect(x - candleW / 2, v >= 0 ? zeroY - hh : zeroY, candleW, hh);
-      }
-
-      // macd & signal lines
-      [[macd, "#c8dff0", 1.2], [sig, "#c8dff0", 1]].forEach(([vals, col, lw]) => {
-        ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath();
-        let started = false;
-        for (let bi = s.viewStart; bi <= s.viewEnd && bi < bars.length; bi++) {
-          const v = vals[bi]; if (v === null) continue;
-          const x = barToX(bi, W);
-          const y = zeroY - (v / maxAbs) * (macdH / 2 - 4);
-          if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      });
-      ctx.fillStyle = C_TEXT_DIM; ctx.font = `8px ${C_FONT}`; ctx.textAlign = "right";
-      ctx.fillText("MACD", W - right + 2, macdTop + 10);
-    }
-
-    // ── drawings ──
-    drawings.forEach((d, di) => {
-      const isHovered  = hoveredRef.current === di;
-      const isSelected = selectedRef.current === di;
-      ctx.save();
-      drawShape(ctx, d, W, mainH, s, isHovered, isSelected, priceMin, priceMax, barToX, priceToY);
-      ctx.restore();
-    });
-
-    // ── in-progress drawing ──
-    if (drawingRef.current) {
-      ctx.save();
-      drawShape(ctx, drawingRef.current, W, mainH, s, false, false, priceMin, priceMax, barToX, priceToY);
-      ctx.restore();
-    }
-
-    // crosshair / tooltip drawn on overlay canvas
-  }, [bars, drawings, mas, showVolume, showRSI, showMACD, chartStyle]);
-
-  function drawShape(ctx, d, W, mainH, s, hovered, selected, priceMin, priceMax, barToX, priceToY) {
-    const alpha = hovered || selected ? 1 : 0.85;
-    ctx.globalAlpha = alpha;
-    const col = d.color || C_MAIN_COL;
-
-    if (d.type === "trendline" || d.type === "hline") {
-      ctx.strokeStyle = col;
-      ctx.lineWidth   = selected ? 2.5 : 1.5;
-      ctx.setLineDash(d.dash ? [6, 4] : []);
-      ctx.beginPath();
-      if (d.type === "hline") {
-        const y = priceToY(d.price, mainH, priceMin, priceMax);
-        ctx.moveTo(CHART_PADDING.left, y);
-        ctx.lineTo(W - CHART_PADDING.right, y);
-        // label
-        ctx.font = `9px ${C_FONT}`; ctx.fillStyle = col; ctx.textAlign = "left";
-        const p = d.price >= 1000 ? d.price.toFixed(2) : d.price >= 1 ? d.price.toFixed(4) : d.price.toFixed(6);
-        ctx.fillText(p, W - CHART_PADDING.right + 4, y - 3);
-      } else {
-        ctx.moveTo(barToX(d.x1, W), priceToY(d.y1, mainH, priceMin, priceMax));
-        ctx.lineTo(barToX(d.x2, W), priceToY(d.y2, mainH, priceMin, priceMax));
-        // extend line
-        const dx = d.x2 - d.x1, dy = d.y2 - d.y1;
-        if (dx !== 0) {
-          const ext = 200;
-          const ex1 = d.x1 - ext, ey1 = d.y1 - (dy / dx) * ext;
-          const ex2 = d.x2 + ext, ey2 = d.y2 + (dy / dx) * ext;
-          ctx.moveTo(barToX(ex1, W), priceToY(ey1, mainH, priceMin, priceMax));
-          ctx.lineTo(barToX(ex2, W), priceToY(ey2, mainH, priceMin, priceMax));
-        }
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    if (d.type === "rect") {
-      const x1 = barToX(d.x1, W), x2 = barToX(d.x2, W);
-      const y1 = priceToY(d.y1, mainH, priceMin, priceMax);
-      const y2 = priceToY(d.y2, mainH, priceMin, priceMax);
-      ctx.fillStyle = (d.color || "#7dd3f0") + "18";
-      ctx.fillRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
-      ctx.strokeStyle = col; ctx.lineWidth = selected ? 2 : 1;
-      ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
-    }
-
-    if (d.type === "pen" && d.points?.length > 1) {
-      ctx.strokeStyle = col; ctx.lineWidth = selected ? 2 : 1.5;
-      ctx.lineJoin = "round"; ctx.lineCap = "round";
-      ctx.beginPath();
-      d.points.forEach(([bi, price], i) => {
-        const x = barToX(bi, W), y = priceToY(price, mainH, priceMin, priceMax);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    }
-
-    if (d.type === "measure") {
-      const x1 = barToX(d.x1, W), x2 = barToX(d.x2, W);
-      const y1 = priceToY(d.y1, mainH, priceMin, priceMax);
-      const y2 = priceToY(d.y2, mainH, priceMin, priceMax);
-      const up = d.y2 >= d.y1;
-      const mcol = up ? C_UP_COL : C_DN_COL;
-      ctx.fillStyle = mcol + "18";
-      ctx.fillRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
-      ctx.strokeStyle = mcol; ctx.lineWidth = 1.5;
-      ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
-      if (d.y1 && d.y2) {
-        const pctMove = ((d.y2 - d.y1) / d.y1 * 100).toFixed(2);
-        const bars_ = Math.abs(d.x2 - d.x1);
-        const label = `${up ? "+" : ""}${pctMove}%  (${bars_} bars)`;
-        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        ctx.fillStyle = "#040810dd";
-        const tw = ctx.measureText(label).width;
-        ctx.fillRect(mx - tw/2 - 6, my - 9, tw + 12, 16);
-        ctx.fillStyle = mcol; ctx.font = `bold 10px ${C_FONT}`; ctx.textAlign = "center";
-        ctx.fillText(label, mx, my + 3);
-      }
-    }
-
-    if (d.type === "text" && d.text) {
-      const x = barToX(d.x, W), y = priceToY(d.price, mainH, priceMin, priceMax);
-      ctx.font = `11px ${C_FONT}`;
-      const lines = d.text.split("\n");
-      const lh = 16, pad = 8;
-      const tw = Math.max(...lines.map(l => ctx.measureText(l).width));
-      const bw = tw + pad * 2, bh = lines.length * lh + pad * 2;
-      ctx.fillStyle = (d.color || "#c8dff0") + "22";
-      ctx.fillRect(x, y - bh, bw, bh);
-      ctx.strokeStyle = d.color || "#c8dff0"; ctx.lineWidth = selected ? 2 : 1;
-      ctx.strokeRect(x, y - bh, bw, bh);
-      ctx.fillStyle = "#e8f4f8"; ctx.textAlign = "left";
-      lines.forEach((line, i) => ctx.fillText(line, x + pad, y - bh + pad + (i + 1) * lh - 4));
-      // pin dot
-      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = d.color || "#c8dff0"; ctx.fill();
-    }
-
-    // selection handles
-    if (selected) {
-      const handles = getHandles(d, W, mainH, priceMin, priceMax, barToX, priceToY);
-      handles.forEach(([hx, hy]) => {
-        ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2);
-        ctx.fillStyle = "#fff"; ctx.fill();
-        ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
-      });
-    }
-  }
-
-  function getHandles(d, W, mainH, priceMin, priceMax, barToX, priceToY) {
-    if (d.type === "trendline")
-      return [[barToX(d.x1, W), priceToY(d.y1, mainH, priceMin, priceMax)],
-              [barToX(d.x2, W), priceToY(d.y2, mainH, priceMin, priceMax)]];
-    if (d.type === "hline") {
-      const y = priceToY(d.price, mainH, priceMin, priceMax), W2 = canvasRef.current?.width || 800;
-      return [[W2 / 3, y], [W2 * 2 / 3, y]];
-    }
-    if (d.type === "rect" || d.type === "measure") {
-      const x1=barToX(d.x1,W),x2=barToX(d.x2,W),y1=priceToY(d.y1,mainH,priceMin,priceMax),y2=priceToY(d.y2,mainH,priceMin,priceMax);
-      return [[x1,y1],[x2,y2],[x1,y2],[x2,y1]];
-    }
-    return [];
-  }
-
-  // ── pointer helpers ──
-  const getPos = (e) => {
-    const rect = overlayRef.current.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const posToBarPrice = useCallback((x, y) => {
-    const c = canvasRef.current; if (!c) return { bi: 0, price: 0 };
-    const { mainH } = getCanvasDims();
-    const s = stateRef.current;
-    const bi = xToBar(x, s.bars, c.width);
-    const price = yToPrice(y, mainH, s.priceMin, s.priceMax);
-    return { bi, price };
-  }, [getCanvasDims, xToBar, yToPrice]);
-
-  // ── mouse/touch handlers ──
-  const onPointerDown = useCallback((e) => {
-    const { x, y } = getPos(e);
-    const { bi, price } = posToBarPrice(x, y);
-    const s = stateRef.current;
-
-    if (tool === "cursor") {
-      // hit-test drawings
-      let hit = -1;
-      drawings.forEach((d, di) => {
-        if (hitTest(d, x, y, canvasRef.current?.width || 800, getCanvasDims().mainH, s, priceToY, barToX)) hit = di;
-      });
-      selectedRef.current = hit >= 0 ? hit : null;
-      if (hit >= 0) dragRef.current = { di: hit, startX: x, startY: y, origDrawing: { ...drawings[hit] } };
-      forceRender(n => n + 1);
-      return;
-    }
-
-    if (tool === "trendline")
-      drawingRef.current = { type:"trendline", x1:bi, y1:price, x2:bi, y2:price, color:C_MAIN_COL };
-    if (tool === "hline")
-      drawingRef.current = { type:"hline", price, color:C_UP_COL };
-    if (tool === "rect" || tool === "measure")
-      drawingRef.current = { type: tool, x1:bi, y1:price, x2:bi, y2:price, color: tool==="measure"?C_UP_COL:"#7dd3f0" };
-    if (tool === "pen")
-      drawingRef.current = { type:"pen", points:[[bi, price]], color:"#c8dff0" };
-    if (tool === "text") {
-      const txt = window.prompt("Enter text (use \\n for new lines):") || "";
-      if (txt) {
-        setDrawings(prev => [...prev, { type:"text", x:bi, price, text:txt.replace(/\\n/g,"\n"), color:"#c8dff0" }]);
-      }
-      return;
-    }
-  }, [tool, drawings, posToBarPrice]);
-
-  const onPointerMove = useCallback((e) => {
-    const { x, y } = getPos(e);
-    const { bi, price } = posToBarPrice(x, y);
-    const c = canvasRef.current; if (!c) return;
-    const s = stateRef.current;
-    const { mainH } = getCanvasDims();
-
-    // tooltip bar
-    const barI = Math.max(0, Math.min(s.bars.length - 1, xToBar(x, s.bars, c.width)));
-    const bar  = s.bars[barI];
-    if (bar) setTooltip({ x, y, bar, price, bi: barI });
-
-    // drag selected
-    if (dragRef.current && tool === "cursor") {
-      const { di, startX, startY, origDrawing } = dragRef.current;
-      const dx = (x - startX) / (c.width / Math.max(1, s.viewEnd - s.viewStart));
-      const dy = (y - startY) / mainH * (s.priceMax - s.priceMin);
-      const updated = { ...origDrawing };
-      if (updated.type === "hline") updated.price = origDrawing.price - dy;
-      if (updated.type === "trendline" || updated.type === "rect" || updated.type === "measure") {
-        updated.x1 = origDrawing.x1 + dx; updated.x2 = origDrawing.x2 + dx;
-        updated.y1 = origDrawing.y1 - dy; updated.y2 = origDrawing.y2 - dy;
-      }
-      if (updated.type === "text") { updated.x = origDrawing.x + dx; updated.price = origDrawing.price - dy; }
-      if (updated.type === "pen")  { updated.points = origDrawing.points.map(([b,p]) => [b+dx, p-dy]); }
-      setDrawings(prev => prev.map((d,i) => i===di ? updated : d));
-      return;
-    }
-
-    // hover
-    let hit = -1;
-    drawings.forEach((d, di) => {
-      if (hitTest(d, x, y, c.width, mainH, s, priceToY, barToX)) hit = di;
-    });
-    hoveredRef.current = hit >= 0 ? hit : null;
-    forceRender(n => n + 1);
-
-    // update in-progress
-    const d = drawingRef.current;
-    if (!d) return;
-    if (d.type === "trendline" || d.type === "rect" || d.type === "measure") { d.x2 = bi; d.y2 = price; }
-    if (d.type === "pen") d.points.push([bi, price]);
-    if (d.type === "measure") d.color = price >= d.y1 ? C_UP_COL : C_DN_COL;
-  }, [tool, drawings, posToBarPrice, xToBar, getCanvasDims]);
-
-  const onPointerUp = useCallback(() => {
-    dragRef.current = null;
-    const d = drawingRef.current;
-    if (!d) return;
-    drawingRef.current = null;
-    if (d.type === "hline") { setDrawings(prev => [...prev, d]); return; }
-    if ((d.type === "trendline" || d.type === "rect" || d.type === "measure") && d.x1 !== d.x2)
-      setDrawings(prev => [...prev, d]);
-    if (d.type === "pen" && d.points.length > 2)
-      setDrawings(prev => [...prev, d]);
-  }, []);
-
-  function hitTest(d, x, y, W, mainH, s, priceToY, barToX) {
-    const tol = 8;
-    if (d.type === "hline") {
-      const py = priceToY(d.price, mainH, s.priceMin, s.priceMax);
-      return Math.abs(y - py) < tol;
-    }
-    if (d.type === "trendline") {
-      const x1=barToX(d.x1,W),y1=priceToY(d.y1,mainH,s.priceMin,s.priceMax);
-      const x2=barToX(d.x2,W),y2=priceToY(d.y2,mainH,s.priceMin,s.priceMax);
-      const len=Math.hypot(x2-x1,y2-y1); if(len<1)return false;
-      const dist=Math.abs((y2-y1)*x-(x2-x1)*y+x2*y1-y2*x1)/len;
-      return dist < tol && x >= Math.min(x1,x2)-10 && x <= Math.max(x1,x2)+10;
-    }
-    if (d.type === "rect" || d.type === "measure" || d.type === "text") {
-      const x1=barToX(d.x1??d.x,W),x2=barToX(d.x2??d.x,W);
-      const y1=priceToY(d.y1??d.price,mainH,s.priceMin,s.priceMax);
-      const y2=priceToY(d.y2??d.price,mainH,s.priceMin,s.priceMax);
-      return x>=Math.min(x1,x2)-tol && x<=Math.max(x1,x2)+tol && y>=Math.min(y1,y2)-tol && y<=Math.max(y1,y2)+tol;
-    }
-    return false;
-  }
-
-  // wheel = zoom
-  const onWheel = useCallback((e) => {
-    e.preventDefault();
-    const s = stateRef.current;
-    const visible = s.viewEnd - s.viewStart;
-    const delta   = e.deltaY > 0 ? Math.ceil(visible * 0.1) : -Math.ceil(visible * 0.1);
-    const newVis  = Math.max(10, Math.min(bars?.length || 200, visible + delta));
-    s.viewStart = Math.max(0, s.viewEnd - newVis);
-    forceRender(n => n + 1);
-  }, [bars]);
-
-  // pan via middle-button or space+drag
-  const panRef = useRef(null);
-  const onKeyDown = useCallback(e => { if (e.code === "Space") e.preventDefault(); }, []);
-  const onMiddleDown = useCallback(e => {
-    if (e.button === 1) panRef.current = { x: e.clientX, viewStart: stateRef.current.viewStart };
-  }, []);
-  const onMiddleMove = useCallback(e => {
-    if (!panRef.current) return;
-    const s = stateRef.current;
-    const dx = e.clientX - panRef.current.x;
-    const visible = s.viewEnd - s.viewStart;
-    const barPx = (canvasRef.current?.width || 800) / visible;
-    const shift = Math.round(-dx / barPx);
-    const ns = Math.max(0, Math.min((bars?.length || 200) - visible, panRef.current.viewStart + shift));
-    s.viewStart = ns; s.viewEnd = ns + visible;
-    forceRender(n => n + 1);
-  }, [bars]);
-  const onMiddleUp = useCallback(() => { panRef.current = null; }, []);
-
-  // delete selected drawing
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedRef.current !== null) {
-        setDrawings(prev => prev.filter((_, i) => i !== selectedRef.current));
-        selectedRef.current = null;
-        forceRender(n => n + 1);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // resize observer
-  useEffect(() => {
-    const canvas = canvasRef.current; if (!canvas) return;
-    const ro = new ResizeObserver(() => {
-      const parent = canvas.parentElement;
-      canvas.width  = parent.clientWidth;
-      canvas.height = parent.clientHeight;
-      if (overlayRef.current) {
-        overlayRef.current.width  = parent.clientWidth;
-        overlayRef.current.height = parent.clientHeight;
-      }
-      draw();
-    });
-    ro.observe(canvas.parentElement);
-    return () => ro.disconnect();
-  }, [draw]);
-
-  useEffect(() => { draw(); }, [draw]);
-
-  // crosshair on overlay
-  useEffect(() => {
-    const ov = overlayRef.current; if (!ov) return;
-    const ctx = ov.getContext("2d");
-    ctx.clearRect(0, 0, ov.width, ov.height);
-    if (!tooltip) return;
-    const { x, y } = tooltip;
-    ctx.strokeStyle = "#162535"; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ov.height); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(ov.width, y); ctx.stroke();
-    ctx.setLineDash([]);
-  }, [tooltip]);
-
-  const cursorStyle = tool === "cursor" ? (hoveredRef.current !== null ? "move" : "default")
-    : tool === "pen" ? "crosshair" : tool === "text" ? "text" : "crosshair";
-
-  return (
-    <div style={{position:"relative",width:"100%",height:"100%",background:C_BG,borderRadius:8,overflow:"hidden"}}>
-      <canvas ref={canvasRef} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%"}}/>
-      <canvas ref={overlayRef} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",cursor:cursorStyle}}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-        onPointerLeave={()=>setTooltip(null)} onWheel={onWheel}
-        onMouseDown={onMiddleDown} onMouseMove={onMiddleMove} onMouseUp={onMiddleUp}
-      />
-      {/* OHLCV tooltip */}
-      {tooltip?.bar && (
-        <div style={{position:"absolute",top:8,left:12,background:"#1a2535cc",border:`1px solid ${C_BORDER}`,borderRadius:6,padding:"6px 10px",pointerEvents:"none",fontFamily:C_FONT,fontSize:9,display:"flex",gap:12}}>
-          {[["O",tooltip.bar.open],["H",tooltip.bar.high],["L",tooltip.bar.low],["C",tooltip.bar.close]].map(([k,v])=>(
-            <span key={k} style={{color: k==="C"?(tooltip.bar.close>=tooltip.bar.open?C_UP_COL:C_DN_COL):C_TEXT_MID}}>
-              <span style={{color:C_TEXT_DIM}}>{k} </span>{v}
-            </span>
-          ))}
-          {tooltip.bar.volume > 0 && <span style={{color:C_TEXT_DIM}}>V {(tooltip.bar.volume/1e6).toFixed(2)}M</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN CHART TAB
-// ─────────────────────────────────────────────────────────────────────────────
-const POPULAR = ["AAPL","TSLA","NVDA","MSFT","AMZN","GOOGL","META","JPM","SPY","QQQ","BTC","ETH"];
-
-function ChartTab() {
-  const [symbol,     setSymbol]     = useState("AAPL");
-  const [input,      setInput]      = useState("AAPL");
-  const [tf,         setTf]         = useState(CHART_TIMEFRAMES[2]);
-  const [bars,       setBars]       = useState(null);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState(null);
-  const [tool,       setTool]       = useState("cursor");
-  const [drawings,   setDrawings]   = useState([]);
-  const [showVolume, setShowVolume] = useState(true);
-  const [showRSI,    setShowRSI]    = useState(false);
-  const [showMACD,   setShowMACD]   = useState(false);
-  const [chartStyle, setChartStyle] = useState("candle");
-  const [mas,        setMas]        = useState([
-    { period:20,  visible:true  },
-    { period:50,  visible:true  },
-    { period:200, visible:false },
-  ]);
-  const [maInputs, setMaInputs] = useState({20:20, 50:50, 200:200});
-  const [showMaEditor, setShowMaEditor] = useState(false);
-
-  const loadChart = useCallback(async (sym, timeframe) => {
-    setLoading(true); setError(null);
-    const isCrypto = ["BTC","ETH","SOL","BNB","XRP"].includes(sym.toUpperCase());
-    const ySym = isCrypto ? `BINANCE:${sym.toUpperCase()}USDT` : sym.toUpperCase();
-    let data = await fetchOHLCV(ySym, timeframe.interval, timeframe.range);
-    if (!data) {
-      // fallback to simulation
-      const bases = {AAPL:220,TSLA:278,NVDA:880,MSFT:388,AMZN:208,GOOGL:165,META:590,JPM:238,SPY:574,QQQ:488,BTC:83000,ETH:2000};
-      const base  = bases[sym.toUpperCase()] || 100;
-      const pts   = timeframe.days <= 1 ? 78 : timeframe.days <= 7 ? 120 : timeframe.days <= 30 ? 120 : timeframe.days <= 90 ? 90 : timeframe.days <= 180 ? 130 : 260;
-      data = genOHLCV(base, pts, base > 1000 ? 0.018 : 0.012);
-      setError("Live data unavailable — showing simulated data.");
-    }
-    setBars(data);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { loadChart(symbol, tf); }, [symbol, tf]);
-
-  const handleSearch = () => {
-    const s = input.trim().toUpperCase();
-    if (s) { setSymbol(s); setDrawings([]); }
-  };
-
-  const toggleMA = (period) => setMas(prev => prev.map(m => m.period === period ? {...m, visible:!m.visible} : m));
-
-  const updateMAPeriod = (oldP, newP) => {
-    const p = parseInt(newP); if (isNaN(p) || p < 1 || p > 500) return;
-    setMas(prev => prev.map(m => m.period === oldP ? {...m, period:p} : m));
-    setMaInputs(prev => { const n={...prev}; delete n[oldP]; n[p]=p; return n; });
-  };
-
-  const chartH = showRSI && showMACD ? 420 : showRSI || showMACD ? 480 : 540;
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:10,fontFamily:C_FONT,color:C_TEXT_MAIN}}>
-      <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
-
-      {/* ── TOP BAR ── */}
-      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        {/* symbol search */}
-        <div style={{display:"flex",gap:0,background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:8,overflow:"hidden"}}>
-          <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())}
-            onKeyDown={e=>e.key==="Enter"&&handleSearch()}
-            placeholder="TICKER"
-            style={{background:"none",border:"none",color:"#e8f4f8",padding:"6px 12px",fontSize:11,fontFamily:C_FONT,width:90,outline:"none",letterSpacing:1}}
-          />
-          <button onClick={handleSearch} style={{background:C_MAIN_COL+"22",border:"none",borderLeft:`1px solid ${C_BORDER}`,color:C_MAIN_COL,padding:"6px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,fontFamily:C_FONT}}>GO</button>
-        </div>
-
-        {/* symbol info */}
-        {bars && !loading && (
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{color:"#e8f4f8",fontSize:13,fontWeight:700,letterSpacing:1}}>{symbol}</span>
-            {(()=>{
-              const last=bars[bars.length-1], first=bars[0];
-              const chg=((last.close-first.close)/first.close*100).toFixed(2);
-              const up=last.close>=first.close;
-              return <>
-                <span style={{color:up?C_UP_COL:C_DN_COL,fontSize:12,fontWeight:700}}>{last.close}</span>
-                <span style={{color:up?C_UP_COL:C_DN_COL,fontSize:10}}>{up?"+":""}{chg}%</span>
-              </>;
-            })()}
-          </div>
-        )}
-
-        {/* spacer */}
-        <div style={{flex:1}}/>
-
-        {/* chart style */}
-        <div style={{display:"flex",gap:4}}>
-          {[["candle","🕯"],["line","〰"]].map(([s,icon])=>(
-            <button key={s} onClick={()=>setChartStyle(s)} style={{background:chartStyle===s?C_MAIN_COL+"20":"none",border:`1px solid ${chartStyle===s?C_MAIN_COL:C_BORDER}`,color:chartStyle===s?C_MAIN_COL:C_TEXT_DIM,borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:12}}>
-              {icon}
-            </button>
-          ))}
-        </div>
-
-        {/* timeframes */}
-        <div style={{display:"flex",gap:4}}>
-          {CHART_TIMEFRAMES.map(t=>(
-            <button key={t.label} onClick={()=>setTf(t)} style={{background:tf.label===t.label?C_MAIN_COL+"20":"none",border:`1px solid ${tf.label===t.label?C_MAIN_COL:C_BORDER}`,color:tf.label===t.label?C_MAIN_COL:C_TEXT_DIM,borderRadius:6,padding:"3px 9px",cursor:"pointer",fontSize:9,letterSpacing:1}}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── POPULAR TICKERS ── */}
-      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-        {POPULAR.map(s=>(
-          <button key={s} onClick={()=>{setSymbol(s);setInput(s);setDrawings([]);}} style={{background:symbol===s?C_MAIN_COL+"20":"none",border:`1px solid ${symbol===s?C_MAIN_COL:C_BORDER}`,color:symbol===s?C_MAIN_COL:C_TEXT_DIM,borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:8,letterSpacing:1}}>
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-
-        {/* ── TOOLBAR (left) ── */}
-        <div style={{display:"flex",flexDirection:"column",gap:4,background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:10,padding:"8px 6px",flexShrink:0}}>
-          {TOOLS.map(t=>(
-            <button key={t.id} onClick={()=>setTool(t.id)} title={t.label} style={{
-              background:tool===t.id?C_MAIN_COL+"22":"none",border:`1px solid ${tool===t.id?C_MAIN_COL:C_BORDER}`,
-              color:tool===t.id?C_MAIN_COL:C_TEXT_MID,borderRadius:6,width:32,height:32,cursor:"pointer",
-              fontSize:t.id==="text"?13:14,display:"flex",alignItems:"center",justifyContent:"center",
-              transition:"all 0.12s",
-            }}>
-              {t.icon}
-            </button>
-          ))}
-          <div style={{height:1,background:C_BORDER,margin:"4px 0"}}/>
-          {/* clear drawings */}
-          <button onClick={()=>{setDrawings([]);}} title="Clear all drawings" style={{background:"none",border:`1px solid ${C_BORDER}`,color:"#ff5f6d",borderRadius:6,width:32,height:32,cursor:"pointer",fontSize:11}}>✕</button>
-        </div>
-
-        {/* ── CHART ── */}
-        <div style={{flex:1,display:"flex",flexDirection:"column",gap:0}}>
-          {error && <div style={{color:"#c8dff0",fontSize:8,background:"#1a1200",border:`1px solid #c8dff033`,borderRadius:6,padding:"5px 10px",marginBottom:6}}>{error}</div>}
-          <div style={{height:chartH,position:"relative",background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:10,overflow:"hidden"}}>
-            {loading
-              ? <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:C_TEXT_DIM,fontSize:10,letterSpacing:2}}>LOADING {symbol}…</div>
-              : bars && <ChartCanvas bars={bars} drawings={drawings} setDrawings={setDrawings} tool={tool}
-                  mas={mas} showVolume={showVolume} showRSI={showRSI} showMACD={showMACD} chartStyle={chartStyle}/>
-            }
-          </div>
-        </div>
-
-        {/* ── RIGHT PANEL (indicators) ── */}
-        <div style={{display:"flex",flexDirection:"column",gap:8,width:170,flexShrink:0}}>
-
-          {/* Moving Averages */}
-          <div style={{background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:10,padding:"10px 12px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-              <span style={{color:C_TEXT_DIM,fontSize:8,letterSpacing:1}}>MOVING AVGS</span>
-              <button onClick={()=>setShowMaEditor(v=>!v)} style={{background:"none",border:`1px solid ${C_BORDER}`,color:C_TEXT_DIM,borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:8}}>
-                {showMaEditor?"▲":"▼"}
-              </button>
-            </div>
-            {mas.map(m=>(
-              <div key={m.period} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-                <button onClick={()=>toggleMA(m.period)} style={{width:12,height:12,borderRadius:2,background:m.visible?MA_COLORS[m.period]||C_MAIN_COL:"none",border:`1.5px solid ${MA_COLORS[m.period]||C_MAIN_COL}`,cursor:"pointer",padding:0,flexShrink:0}}/>
-                <span style={{color:m.visible?MA_COLORS[m.period]||C_MAIN_COL:C_TEXT_DIM,fontSize:9}}>MA</span>
-                {showMaEditor
-                  ? <input type="number" value={maInputs[m.period]??m.period}
-                      onChange={e=>setMaInputs(prev=>({...prev,[m.period]:e.target.value}))}
-                      onBlur={e=>updateMAPeriod(m.period, e.target.value)}
-                      onKeyDown={e=>e.key==="Enter"&&updateMAPeriod(m.period, e.target.value)}
-                      style={{width:46,background:"#1a2535",border:`1px solid ${C_BORDER}`,color:"#e8f4f8",borderRadius:4,padding:"2px 4px",fontSize:9,fontFamily:C_FONT,outline:"none"}}
-                    />
-                  : <span style={{color:C_TEXT_DIM,fontSize:9}}>{m.period}</span>
-                }
-              </div>
-            ))}
-          </div>
-
-          {/* Indicators */}
-          <div style={{background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:10,padding:"10px 12px"}}>
-            <div style={{color:C_TEXT_DIM,fontSize:8,letterSpacing:1,marginBottom:8}}>INDICATORS</div>
-            {[
-              {label:"Volume",  state:showVolume, set:setShowVolume, col:"#2a4a65"},
-              {label:"RSI 14",  state:showRSI,    set:setShowRSI,    col:"#b8e8ff"},
-              {label:"MACD",    state:showMACD,   set:setShowMACD,   col:"#c8dff0"},
-            ].map(({label,state,set,col})=>(
-              <button key={label} onClick={()=>set(v=>!v)} style={{
-                display:"flex",alignItems:"center",gap:7,background:"none",border:"none",cursor:"pointer",
-                padding:"4px 0",width:"100%",textAlign:"left",
-              }}>
-                <div style={{width:10,height:10,borderRadius:2,background:state?col:"none",border:`1.5px solid ${col}`,flexShrink:0}}/>
-                <span style={{color:state?col:C_TEXT_DIM,fontSize:9,fontFamily:C_FONT}}>{label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Tool hint */}
-          <div style={{background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:10,padding:"10px 12px"}}>
-            <div style={{color:C_TEXT_DIM,fontSize:8,letterSpacing:1,marginBottom:6}}>ACTIVE TOOL</div>
-            <div style={{color:C_MAIN_COL,fontSize:10,fontFamily:C_FONT}}>{TOOLS.find(t=>t.id===tool)?.label}</div>
-            <div style={{color:"#6890a8",fontSize:8,marginTop:8,lineHeight:1.7}}>
-              Scroll = zoom<br/>
-              Middle-click = pan<br/>
-              Click drawing = select<br/>
-              Delete key = remove
-            </div>
-          </div>
-
-          {/* Drawing count */}
-          {drawings.length > 0 && (
-            <div style={{background:PANEL_BG,border:`1px solid ${C_BORDER}`,borderRadius:10,padding:"10px 12px"}}>
-              <div style={{color:C_TEXT_DIM,fontSize:8,letterSpacing:1,marginBottom:4}}>DRAWINGS</div>
-              <div style={{color:"#a8b8c8",fontSize:10}}>{drawings.length} object{drawings.length!==1?"s":""}</div>
-              <button onClick={()=>setDrawings([])} style={{background:"none",border:`1px solid #ff5f6d33`,color:"#ff5f6d",borderRadius:4,padding:"3px 8px",cursor:"pointer",fontSize:8,fontFamily:C_FONT,marginTop:6,width:"100%"}}>CLEAR ALL</button>
-            </div>
-          )}
-        </div>
-      </div>
-
-    </div>
-  );
-}
 
 export default function MarketDashboard(){
   const [allData,    setAllData]    = useState(null);
@@ -5707,7 +5569,7 @@ export default function MarketDashboard(){
   const TfBarInline=({value,onChange,options})=>(
     <div style={{display:"flex",gap:6}}>
       {options.map(k=>(
-        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?C_MAIN_COL+"20":"none",border:`1px solid ${value===k?C_MAIN_COL:"#1a2535"}`,color:value===k?C_MAIN_COL:"#162535",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
+        <button key={k} onClick={()=>onChange(k)} style={{background:value===k?MAIN_COL+"20":"none",border:`1px solid ${value===k?MAIN_COL:"#1a2535"}`,color:value===k?MAIN_COL:"#162535",borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>{k}</button>
       ))}
     </div>
   );
@@ -5721,7 +5583,7 @@ export default function MarketDashboard(){
         {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <div>
-            <h1 style={{color:"#e8f4f8",fontSize:17,fontWeight:700,letterSpacing:3,margin:0}}>MARKET<span style={{color:C_MAIN_COL}}>PULSE</span></h1>
+            <h1 style={{color:"#e8f4f8",fontSize:17,fontWeight:700,letterSpacing:3,margin:0}}>MARKET<span style={{color:MAIN_COL}}>PULSE</span></h1>
             <div style={{color:"#6890a8",fontSize:8,letterSpacing:2,marginTop:3}}>
               {lastUpdate?`UPDATED ${lastUpdate.toLocaleTimeString()}`:"LOADING"} · {liveCount}/16 LIVE
             </div>
@@ -5729,7 +5591,7 @@ export default function MarketDashboard(){
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
             <button onClick={load} style={{background:"none",border:"1px solid #1a2535",color:"#6890a8",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:9}}>↺</button>
             {NAV_TABS.map(t=>(
-              <button key={t.key} onClick={()=>setView(t.key)} style={{background:view===t.key?"#152030":"none",border:`1px solid ${view===t.key?C_MAIN_COL:"#2a3f52"}`,color:view===t.key?C_MAIN_COL:"#a8c4d4",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>
+              <button key={t.key} onClick={()=>setView(t.key)} style={{background:view===t.key?"#152030":"none",border:`1px solid ${view===t.key?MAIN_COL:"#2a3f52"}`,color:view===t.key?MAIN_COL:"#a8c4d4",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:9,letterSpacing:1,transition:"all 0.15s"}}>
                 {t.icon} {t.label.toUpperCase()}
               </button>
             ))}
@@ -5738,6 +5600,11 @@ export default function MarketDashboard(){
 
         {/* FACTORS */}
         {view==="factors"&&factorData&&<FactorView factorData={factorData} liveQuotes={liveQuotes} liveCandles={liveCandles} thematicLoading={thematicLoading}/>}
+        {view==="rrg"&&<RRGView liveQuotes={liveQuotes} liveCandles={liveCandles} thematicLoading={thematicLoading}/>}
+        {view==="corr"&&<CorrView allData={allData}/>}
+        {view==="options"&&<OptionsView/>}
+        {view==="earnings"&&<EarningsView/>}
+        {view==="ecocal"&&<EcoCalView/>}
 
         {/* INDUSTRIES */}
         {view==="industries"&&<IndustriesView liveQuotes={liveQuotes} thematicLoading={thematicLoading}/>}
@@ -5752,7 +5619,6 @@ export default function MarketDashboard(){
         {view==="fundamentals"&&<FundamentalsView/>}
 
         {/* CHART */}
-        {view==="chart"&&<ChartTab/>}
 
         {/* NEWS */}
         {view==="news"&&<NewsView newsData={newsData} calData={calData}/>}
