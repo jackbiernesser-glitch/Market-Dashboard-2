@@ -2116,7 +2116,7 @@ function loadFactorData() {
 // ─────────────────────────────────────────────────────────────────────────────
 // FACTOR VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-function FactorView({ factorData, liveQuotes, liveCandles }) {
+function FactorView({ factorData, liveQuotes, liveCandles, thematicLoading }) {
   const [tf,          setTf]          = useState("3M");
   const [activeF,     setActiveF]     = useState("momentum");
   const [subview,     setSubview]     = useState("overview");
@@ -2219,8 +2219,8 @@ function FactorView({ factorData, liveQuotes, liveCandles }) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <SectionLabel>FACTOR PERFORMANCE</SectionLabel>
-          <span style={{color:isLive?"#7dd3f0":"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
-            {isLive?"● LIVE · ETF-BASED RELATIVE PERFORMANCE":"○ SIMULATED"}
+          <span style={{color:isLive?"#7dd3f0":thematicLoading?"#c8dff0":"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
+            {isLive?"● LIVE · ETF-BASED RELATIVE PERFORMANCE":thematicLoading?"◌ LOADING LIVE DATA...":"○ SIMULATED"}
           </span>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -3397,7 +3397,7 @@ function RSControls({ sort, setSort, benchmark, setBenchmark, search, setSearch 
   );
 }
 
-function ThemesRSView({ liveQuotes, liveCandles }) {
+function ThemesRSView({ liveQuotes, liveCandles, thematicLoading }) {
   const [subview,    setSubview]    = useState("themes");
   const [benchmark,  setBenchmark]  = useState("spx");
   const [sort,       setSort]       = useState("rank");
@@ -3464,8 +3464,8 @@ function ThemesRSView({ liveQuotes, liveCandles }) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div>
           <div style={{color:"#e8f4f8",fontSize:14,fontWeight:700,letterSpacing:2}}>THEMES, SECTORS & SUB MARKETS</div>
-          <div style={{color:isLive?"#7dd3f0":"#1e3045",fontSize:8,marginTop:2,letterSpacing:1}}>
-            {isLive ? "● LIVE RS SCORES · ETF-BASED vs SPY" : "○ SIMULATED · RELATIVE STRENGTH RADAR"}
+          <div style={{color:isLive?"#7dd3f0":thematicLoading?"#c8dff0":"#1e3045",fontSize:8,marginTop:2,letterSpacing:1}}>
+            {isLive ? "● LIVE RS SCORES · ETF-BASED vs SPY" : thematicLoading ? "◌ LOADING LIVE DATA..." : "○ SIMULATED · RELATIVE STRENGTH RADAR"}
           </div>
         </div>
         {/* sub-view tabs */}
@@ -4365,7 +4365,7 @@ function genIndustryData() {
   });
 }
 
-function IndustriesView({ liveQuotes }) {
+function IndustriesView({ liveQuotes, thematicLoading }) {
   const [tf,        setTf]        = useState("1D");
   const [sortBy,    setSortBy]    = useState("change");
   const [filterSec, setFilterSec] = useState("All");
@@ -4434,7 +4434,7 @@ function IndustriesView({ liveQuotes }) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <span style={{color:"#6890a8",fontSize:8,letterSpacing:2}}>{filtered.length} INDUSTRIES</span>
-          <span style={{color:isLive?"#7dd3f0":"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{isLive?"● LIVE · 1D FROM ETFS":"○ SIMULATED"}</span>
+          <span style={{color:isLive?"#7dd3f0":thematicLoading?"#c8dff0":"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace"}}>{isLive?"● LIVE · 1D FROM ETFS":thematicLoading?"◌ LOADING LIVE DATA...":"○ SIMULATED"}</span>
           <span style={{color:"#7dd3f0",fontSize:9}}>▲ {advancing}</span>
           <span style={{color:"#ff5f6d",fontSize:9}}>▼ {declining}</span>
           {unchanged>0&&<span style={{color:"#6890a8",fontSize:9}}>— {unchanged}</span>}
@@ -5614,27 +5614,39 @@ export default function MarketDashboard(){
   const [view,       setView]       = useState("markets");
   const [lastUpdate, setLastUpdate] = useState(null);
 
+  const [thematicLoading, setThematicLoading] = useState(false);
+
   const load=useCallback(async()=>{
     setLoading(true);setProgress(0);
     setLoadLabel("FETCHING MARKET DATA");
-    const mData=await loadMarketData(p=>setProgress(Math.round(p*0.3)));
+    const mData=await loadMarketData(p=>setProgress(Math.round(p*0.4)));
     setLoadLabel("FETCHING SECTOR DATA");
-    const hData=await loadHeatmapData(p=>setProgress(30+Math.round(p*0.2)));
+    const hData=await loadHeatmapData(p=>setProgress(40+Math.round(p*0.35)));
     setLoadLabel("FETCHING NASDAQ DATA");
-    const nData=await loadNdxData(p=>setProgress(50+Math.round(p*0.15)));
-    setLoadLabel("FETCHING INDUSTRY & FACTOR DATA");
-    const {quotes:lq, candles:lc}=await loadLiveThematicData(p=>setProgress(65+Math.round(p*0.25)));
+    const nData=await loadNdxData(p=>setProgress(75+Math.round(p*0.25)));
     setLoadLabel("BUILDING BREADTH DATA");
     const bData=loadBreadthData();
     setAllData(mData);setHeatData(hData);setNdxData(nData);setBreadthData(bData);
-    setLiveQuotes(lq);setLiveCandles(lc);
     setNewsData(genMarketNews());setCalData(genCalendar());
     setFactorData(loadFactorData());
     setLastUpdate(new Date());setLoading(false);
   },[]);
 
+  // Load industry/factor/theme data in background after dashboard is visible
+  const loadThematic=useCallback(async()=>{
+    setThematicLoading(true);
+    try {
+      const {quotes:lq, candles:lc}=await loadLiveThematicData();
+      setLiveQuotes(lq);setLiveCandles(lc);
+    } catch {}
+    setThematicLoading(false);
+  },[]);
+
   useEffect(()=>{load();},[]);
   useEffect(()=>{const id=setInterval(load,60000);return()=>clearInterval(id);},[load]);
+  // Background fetch for industries/themes/factors — runs after dashboard is visible
+  useEffect(()=>{loadThematic();},[]);
+  useEffect(()=>{const id=setInterval(loadThematic,300000);return()=>clearInterval(id);},[loadThematic]);
 
   const handleSelect=useCallback((cat,id)=>{setActiveTab(cat);setSelected(id);setView("markets");},[]);
   const toggleWatch =useCallback((id)=>setWatchlist(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;}),[]);
@@ -5680,16 +5692,16 @@ export default function MarketDashboard(){
         </div>
 
         {/* FACTORS */}
-        {view==="factors"&&factorData&&<FactorView factorData={factorData} liveQuotes={liveQuotes} liveCandles={liveCandles}/>}
+        {view==="factors"&&factorData&&<FactorView factorData={factorData} liveQuotes={liveQuotes} liveCandles={liveCandles} thematicLoading={thematicLoading}/>}
 
         {/* INDUSTRIES */}
-        {view==="industries"&&<IndustriesView liveQuotes={liveQuotes}/>}
+        {view==="industries"&&<IndustriesView liveQuotes={liveQuotes} thematicLoading={thematicLoading}/>}
 
         {/* SCREENER */}
         { /* screener hidden */ }
 
         {/* THEMES / RS */}
-        {view==="themes"&&<ThemesRSView liveQuotes={liveQuotes} liveCandles={liveCandles}/>}
+        {view==="themes"&&<ThemesRSView liveQuotes={liveQuotes} liveCandles={liveCandles} thematicLoading={thematicLoading}/>}
 
         {/* FUNDAMENTALS */}
         {view==="fundamentals"&&<FundamentalsView/>}
