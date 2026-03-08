@@ -3931,46 +3931,62 @@ function FundamentalsView() {
               </FundSection>
 
               {/* Quarterly Revenue with QoQ % change */}
-              {qtrRevenue && qtrRevenue.length >= 2 && (() => {
-                const qtrs = qtrRevenue.slice(-8).map((q, i, arr) => {
-                  const revB = +(q.rev / 1e9).toFixed(2);
-                  const prev = arr[i - 1];
-                  const qoq  = prev ? +((q.rev / prev.rev - 1) * 100).toFixed(1) : null;
-                  // Format label: "2024-03-31" → "Q1'24"
-                  const parts = q.label.split("-");
-                  const mo = parseInt(parts[1] || "3");
-                  const yr = (parts[0] || "24").slice(-2);
-                  const qNum = mo <= 3 ? 1 : mo <= 6 ? 2 : mo <= 9 ? 3 : 4;
-                  return { label: `Q${qNum}'${yr}`, rev: revB, qoq };
-                });
+              {(()=>{
+                let qtrs;
+                if(qtrRevenue && qtrRevenue.length >= 2) {
+                  qtrs = qtrRevenue.slice(-8).map((q, i, arr) => {
+                    const revB = +(q.rev / 1e9).toFixed(2);
+                    const prev = arr[i - 1];
+                    const qoq  = prev ? +((q.rev / prev.rev - 1) * 100).toFixed(1) : null;
+                    const parts = q.label.split("-");
+                    const mo = parseInt(parts[1] || "3");
+                    const yr = (parts[0] || "24").slice(-2);
+                    const qNum = mo <= 3 ? 1 : mo <= 6 ? 2 : mo <= 9 ? 3 : 4;
+                    return { label: `Q${qNum}'${yr}`, rev: revB, qoq };
+                  });
+                } else {
+                  // Simulated fallback — scale off revYears data
+                  const baseRev = d.revYears[d.revYears.length - 1] / 4;
+                  const seed = d.symbol ? d.symbol.split("").reduce((a,c)=>a+c.charCodeAt(0),0) : 42;
+                  const now = new Date();
+                  qtrs = Array.from({length:8}, (_,i) => {
+                    const qIdx = 7 - i;
+                    const qNum = ((now.getMonth()/3|0) - qIdx % 4 + 4) % 4 + 1;
+                    const yr = String(now.getFullYear() - Math.floor((qIdx)/4)).slice(-2);
+                    const growth = 1 + (Math.sin(seed + i * 1.7) * 0.04);
+                    const rev = +(baseRev * growth * (1 + i * 0.01)).toFixed(2);
+                    return { label: `Q${qNum}'${yr}`, rev, qoq: null };
+                  }).map((q, i, arr) => ({
+                    ...q,
+                    qoq: i > 0 ? +((q.rev / arr[i-1].rev - 1) * 100).toFixed(1) : null
+                  }));
+                }
                 return (
-                  <FundSection title="QUARTERLY REVENUE · $B · QoQ % CHANGE" color="#7dd3f0">
-                    <ResponsiveContainer width="100%" height={175}>
-                      <BarChart data={qtrs} margin={{top:32,right:8,bottom:0,left:0}}>
+                  <FundSection title="QUARTERLY REVENUE ($B)" color="#b8e8ff">
+                    <ResponsiveContainer width="100%" height={165}>
+                      <BarChart data={qtrs} margin={{top:28,right:8,bottom:0,left:0}}>
                         <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
-                        <XAxis dataKey="label" tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
-                        <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={38} tickFormatter={v=>`$${v}B`}/>
+                        <XAxis dataKey="label" tick={{fill:"#2a4a65",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={36} tickFormatter={v=>`$${v}B`}/>
                         <Tooltip content={({active,payload})=>{
                           if(!active||!payload?.length) return null;
                           const row=payload[0]?.payload;
                           return(
                             <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"8px 12px",fontFamily:"'Space Mono',monospace",fontSize:9}}>
-                              <div style={{color:"#7dd3f0",marginBottom:3}}>{row.label}: ${row.rev}B</div>
+                              <div style={{color:"#b8e8ff",marginBottom:3}}>{row.label}: ${row.rev}B</div>
                               {row.qoq!=null&&<div style={{color:row.qoq>=0?"#7dd3f0":"#ff5f6d"}}>QoQ: {row.qoq>=0?"+":""}{row.qoq}%</div>}
                             </div>
                           );
                         }}/>
-                        <Bar dataKey="rev" maxBarSize={55}
+                        <Bar dataKey="rev" fill="#b8e8ff44" stroke="#b8e8ff" strokeWidth={1} radius={[3,3,0,0]} maxBarSize={60}
                           shape={(props)=>{
                             const {x,y,width,height,payload}=props;
-                            const qoqUp = payload.qoq == null || payload.qoq >= 0;
-                            const barCol = payload.qoq == null ? "#7dd3f0" : qoqUp ? "#7dd3f0" : "#ff5f6d";
                             return(
                               <g>
-                                <rect x={x} y={y} width={width} height={height} fill={barCol+"44"} stroke={barCol} strokeWidth={1} rx={3}/>
-                                <text x={x+width/2} y={y-16} textAnchor="middle" fill="#c8dff0" fontSize={8} fontFamily="'Space Mono',monospace">${payload.rev}B</text>
+                                <rect x={x} y={y} width={width} height={height} fill="#b8e8ff44" stroke="#b8e8ff" strokeWidth={1} rx={3}/>
+                                <text x={x+width/2} y={y-14} textAnchor="middle" fill="#b8e8ff" fontSize={8} fontFamily="'Space Mono',monospace">${payload.rev}B</text>
                                 {payload.qoq!=null&&(
-                                  <text x={x+width/2} y={y-4} textAnchor="middle"
+                                  <text x={x+width/2} y={y-3} textAnchor="middle"
                                     fill={payload.qoq>=0?"#7dd3f0":"#ff5f6d"}
                                     fontSize={7} fontFamily="'Space Mono',monospace" fontWeight="700">
                                     {payload.qoq>=0?"+":""}{payload.qoq}%
@@ -4133,6 +4149,13 @@ function FundamentalsView() {
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
                   <FundMetric label="REVENUE GROWTH"   value={d.revGrowth}  fmt={v=>`${v>0?"+":""}${v.toFixed(1)}%`} goodHigh/>
                   <FundMetric label="EPS GROWTH"       value={d.epsGrowth}  fmt={v=>`${v>0?"+":""}${v.toFixed(1)}%`} goodHigh/>
+                  {(()=>{
+                    if(!qtrRevenue||qtrRevenue.length<2) return null;
+                    const last=qtrRevenue[qtrRevenue.length-1].rev;
+                    const prev=qtrRevenue[qtrRevenue.length-2].rev;
+                    const qoq=+((last/prev-1)*100).toFixed(1);
+                    return <FundMetric label="QOQ REV. GROWTH" value={qoq} fmt={v=>`${v>0?"+":""}${v.toFixed(1)}%`} goodHigh benchmarkLabel="Quarter-over-quarter revenue change"/>;
+                  })()}
                   <FundMetric label="GROSS PROFIT GR." value={d.grossGrowth} fmt={v=>`${v>0?"+":""}${v.toFixed(1)}%`} goodHigh/>
                   <FundMetric label="FCF GROWTH"       value={d.fcfGrowth}  fmt={v=>`${v>0?"+":""}${v.toFixed(1)}%`} goodHigh/>
                   <FundMetric label="3Y REV. CAGR"     value={d.rev3yCagr}  fmt={v=>`${v>0?"+":""}${v.toFixed(1)}%`} goodHigh benchmarkLabel="Compound annual growth rate"/>
@@ -5625,6 +5648,8 @@ export default function MarketDashboard(){
   const load=useCallback(async()=>{
     setLoading(true);setProgress(0);
     setLoadLabel("FETCHING MARKET DATA");
+    // Kick off VIX fetch in parallel — don't wait for it to block the load
+    const vixPromise = fetchVIX();
     const mData=await loadMarketData(p=>setProgress(Math.round(p*0.4)));
     setLoadLabel("FETCHING SECTOR DATA");
     const hData=await loadHeatmapData(p=>setProgress(40+Math.round(p*0.35)));
@@ -5632,19 +5657,23 @@ export default function MarketDashboard(){
     const nData=await loadNdxData(p=>setProgress(75+Math.round(p*0.25)));
     setLoadLabel("BUILDING BREADTH DATA");
     const bData=loadBreadthData();
+    const vixQuote = await vixPromise;
     setAllData(mData);setHeatData(hData);setNdxData(nData);setBreadthData(bData);
     setNewsData(genMarketNews());setCalData(genCalendar());
     setFactorData(loadFactorData());
+    // Seed liveQuotes with real VIX immediately — thematic load will fill the rest later
+    if(vixQuote) setLiveQuotes(prev=>({...prev,"^VIX":vixQuote}));
     setLastUpdate(new Date());setLoading(false);
   },[]);
 
   // Silent background refresh — updates data without showing the loading screen
   const refresh=useCallback(async()=>{
     try {
-      const [mData,hData,nData]=await Promise.all([
-        loadMarketData(), loadHeatmapData(), loadNdxData()
+      const [mData,hData,nData,vixQuote]=await Promise.all([
+        loadMarketData(), loadHeatmapData(), loadNdxData(), fetchVIX()
       ]);
       setAllData(mData);setHeatData(hData);setNdxData(nData);
+      if(vixQuote) setLiveQuotes(prev=>({...prev,"^VIX":vixQuote}));
       setLastUpdate(new Date());
     } catch {}
   },[]);
