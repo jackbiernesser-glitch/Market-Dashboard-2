@@ -381,6 +381,23 @@ async function fetchFinnhubMetrics(symbol) {
   } catch { return null; }
 }
 
+// Fetch quarterly revenue from Yahoo Finance incomeStatementHistoryQuarterly
+async function fetchQuarterlyRevenue(symbol) {
+  try {
+    const r = await fetch(
+      `${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(symbol)}&modules=incomeStatementHistoryQuarterly`
+    );
+    const d = await r.json();
+    const stmts = d?.quoteSummary?.result?.[0]?.incomeStatementHistoryQuarterly?.incomeStatementHistory;
+    if (!stmts || stmts.length === 0) return null;
+    // Yahoo returns newest first — reverse so oldest→newest
+    return [...stmts].reverse().map(q => ({
+      label: q.endDate?.fmt ?? "",
+      rev:   q.totalRevenue?.raw ?? null,
+    })).filter(q => q.rev != null);
+  } catch { return null; }
+}
+
 // Fetch company profile from Yahoo Finance
 async function fetchProfile(symbol) {
   try {
@@ -424,10 +441,10 @@ async function loadMarketData(onProgress) {
   let done=0,total=allAssets.reduce((s,[,a])=>s+a.length,0);
   for(const [cat,assets] of allAssets) {
     out[cat]=await Promise.all(assets.map(async asset=>{
-      let livePrice=null,histories={};
+      let livePrice=null,liveDp=null,histories={};
       if(asset.symbol) {
         const quote=await fetchQuote(asset.symbol);
-        if(quote) livePrice=quote.price;
+        if(quote) { livePrice=quote.price; liveDp=quote.dp ?? null; }
         for(const tf of TIMEFRAMES) {
           const {interval,range}=tfToYahoo(tf.key);
           const candles=await fetchYahooCandles(asset.symbol,interval,range);
@@ -444,7 +461,7 @@ async function loadMarketData(onProgress) {
         for(const tf of TIMEFRAMES) histories[tf.key]=generateHistory(asset.base,vol,tf.days);
       }
       done++;onProgress(Math.round(done/total*100));
-      return{...asset,livePrice,histories,isLive:!!livePrice};
+      return{...asset,livePrice,liveDp,histories,isLive:!!livePrice};
     }));
   }
   return out;
@@ -1045,7 +1062,9 @@ function Ticker({allData}){
     <div style={{overflow:"hidden",borderBottom:"1px solid #111a24",background:"#0d1420",padding:"6px 0"}}>
       <div ref={ref} style={{display:"flex",whiteSpace:"nowrap",willChange:"transform"}}>
         {items.map((a,i)=>{
-          const h=a.histories["1D"],p=pct(h),up=p>=0,price=currentPrice(a,"1D");
+          const price=currentPrice(a,"1D");
+          const p = a.liveDp != null ? a.liveDp : pct(a.histories["1D"]);
+          const up=p>=0;
           return(
             <span key={i} style={{display:"inline-flex",alignItems:"center",gap:6,marginRight:28,fontSize:10,fontFamily:"'Space Mono',monospace"}}>
               <span style={{color:"#5a7a95"}}>{a.label}</span>
@@ -3632,6 +3651,7 @@ function FundamentalsView() {
   const [loading,   setLoading]  = useState(false);
   const [isLive,    setIsLive]   = useState(false);
   const [activeTab, setActiveTab]= useState("overview");
+  const [qtrRevenue,setQtrRevenue]=useState(null);
 
   const POPULAR_TICKERS = ["AAPL","MSFT","NVDA","META","GOOGL","AMZN","TSLA","JPM","LLY","V","COST","NFLX","AMD","CRM","CRWD"];
 
@@ -3644,10 +3664,11 @@ function FundamentalsView() {
 
     try {
       // Fetch profile, metrics, and quote in parallel
-      const [profile, metrics, quote] = await Promise.all([
+      const [profile, metrics, quote, qtrRev] = await Promise.all([
         fetchProfile(s),
         fetchFinnhubMetrics(s),
         fetchQuote(s),
+        fetchQuarterlyRevenue(s),
       ]);
 
       if (metrics && quote) {
@@ -3727,14 +3748,17 @@ function FundamentalsView() {
 
         setData(live);
         setIsLive(true);
+        setQtrRevenue(qtrRev);
       } else {
         // Fallback to simulated
         setData(genFundamentals(s));
         setIsLive(false);
+        setQtrRevenue(null);
       }
     } catch {
       setData(genFundamentals(s));
       setIsLive(false);
+      setQtrRevenue(null);
     }
 
     setLoading(false);
@@ -3905,6 +3929,62 @@ function FundamentalsView() {
                   </BarChart>
                 </ResponsiveContainer>
               </FundSection>
+
+              {/* Quarterly Revenue with QoQ % change */}
+              {qtrRevenue && qtrRevenue.length >= 2 && (() => {
+                const qtrs = qtrRevenue.slice(-8).map((q, i, arr) => {
+                  const revB = +(q.rev / 1e9).toFixed(2);
+                  const prev = arr[i - 1];
+                  const qoq  = prev ? +((q.rev / prev.rev - 1) * 100).toFixed(1) : null;
+                  // Format label: "2024-03-31" → "Q1'24"
+                  const parts = q.label.split("-");
+                  const mo = parseInt(parts[1] || "3");
+                  const yr = (parts[0] || "24").slice(-2);
+                  const qNum = mo <= 3 ? 1 : mo <= 6 ? 2 : mo <= 9 ? 3 : 4;
+                  return { label: `Q${qNum}'${yr}`, rev: revB, qoq };
+                });
+                return (
+                  <FundSection title="QUARTERLY REVENUE · $B · QoQ % CHANGE" color="#7dd3f0">
+                    <ResponsiveContainer width="100%" height={175}>
+                      <BarChart data={qtrs} margin={{top:32,right:8,bottom:0,left:0}}>
+                        <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
+                        <XAxis dataKey="label" tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{fill:"#4a6a85",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={38} tickFormatter={v=>`$${v}B`}/>
+                        <Tooltip content={({active,payload})=>{
+                          if(!active||!payload?.length) return null;
+                          const row=payload[0]?.payload;
+                          return(
+                            <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"8px 12px",fontFamily:"'Space Mono',monospace",fontSize:9}}>
+                              <div style={{color:"#7dd3f0",marginBottom:3}}>{row.label}: ${row.rev}B</div>
+                              {row.qoq!=null&&<div style={{color:row.qoq>=0?"#7dd3f0":"#ff5f6d"}}>QoQ: {row.qoq>=0?"+":""}{row.qoq}%</div>}
+                            </div>
+                          );
+                        }}/>
+                        <Bar dataKey="rev" maxBarSize={55}
+                          shape={(props)=>{
+                            const {x,y,width,height,payload}=props;
+                            const qoqUp = payload.qoq == null || payload.qoq >= 0;
+                            const barCol = payload.qoq == null ? "#7dd3f0" : qoqUp ? "#7dd3f0" : "#ff5f6d";
+                            return(
+                              <g>
+                                <rect x={x} y={y} width={width} height={height} fill={barCol+"44"} stroke={barCol} strokeWidth={1} rx={3}/>
+                                <text x={x+width/2} y={y-16} textAnchor="middle" fill="#c8dff0" fontSize={8} fontFamily="'Space Mono',monospace">${payload.rev}B</text>
+                                {payload.qoq!=null&&(
+                                  <text x={x+width/2} y={y-4} textAnchor="middle"
+                                    fill={payload.qoq>=0?"#7dd3f0":"#ff5f6d"}
+                                    fontSize={7} fontFamily="'Space Mono',monospace" fontWeight="700">
+                                    {payload.qoq>=0?"+":""}{payload.qoq}%
+                                  </text>
+                                )}
+                              </g>
+                            );
+                          }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </FundSection>
+                );
+              })()}
 
               {/* EPS quarterly trend */}
               <FundSection title="QUARTERLY EPS — LAST 8 QUARTERS" color="#c8dff0">
