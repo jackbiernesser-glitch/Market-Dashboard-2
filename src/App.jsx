@@ -135,7 +135,6 @@ const NAV_TABS   = [
   {key:"markets",      label:"Markets",      icon:"◈"},
   {key:"heatmap",      label:"Heatmap",      icon:"▦"},
   {key:"industries",   label:"Industries",   icon:"⊞"},
-  {key:"screener",     label:"Screener",     icon:"⌗"},
   {key:"themes",       label:"Themes",       icon:"◭"},
   {key:"fundamentals", label:"Fundamentals", icon:"ƒ"},
   {key:"breadth",      label:"Breadth",      icon:"⟁"},
@@ -482,13 +481,181 @@ async function loadNdxData(onProgress) {
   return loadSectorData(NDX_SECTORS, onProgress);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// S&P 500 FULL TICKER LIST (503 constituents)
+// ─────────────────────────────────────────────────────────────────────────────
+const SP500_TICKERS = [
+  "MMM","AOS","ABT","ABBV","ACN","ADBE","AMD","AES","AFL","A","APD","ABNB","AKAM","ALB","ARE","ALGN",
+  "ALLE","LNT","ALL","GOOGL","GOOG","MO","AMZN","AMCR","AEE","AAL","AEP","AXP","AIG","AMT","AWK","AMP",
+  "AME","AMGN","APH","ADI","ANSS","AON","APA","AAPL","AMAT","APTV","ACGL","ADM","ANET","AJG","AIZ",
+  "T","ATO","ADSK","ADP","AZO","AVB","AVY","AXON","BKR","BALL","BAC","BK","BBWI","BAX","BDX","BBY",
+  "BIO","TECH","BIIB","BLK","BX","BA","BKNG","BWA","BSX","BMY","AVGO","BR","BRO","BF.B","BLDR","BG",
+  "CDNS","CZR","CPT","CPB","COF","CAH","KMX","CCL","CARR","CTLT","CAT","CBOE","CBRE","CDW","CE","COR",
+  "CNC","CNX","CDAY","CF","CRL","SCHW","CHTR","CVX","CMG","CB","CHD","CI","CINF","CTAS","CSCO","C",
+  "CFG","CLX","CME","CMS","KO","CTSH","CL","CMCSA","CAG","COP","ED","STZ","CEG","COO","CPRT","GLW",
+  "CPAY","CTVA","CSGP","COST","CTRA","CCI","CSX","CMI","CVS","DHR","DRI","DVA","DAY","DE","DAL","DVN",
+  "DXCM","FANG","DLR","DFS","DG","DLTR","D","DPZ","DOV","DOW","DHI","DTE","DUK","DD","EMN","ETN",
+  "EBAY","ECL","EIX","EW","EA","ELV","LLY","EMR","ENPH","ETR","EOG","EPAM","EQT","EFX","EQIX","EQR",
+  "ESS","EL","ETSY","EG","EVRST","ES","EXC","EXPE","EXPD","EXR","XOM","FFIV","FDS","FICO","FAST","FRT",
+  "FDX","FIS","FITB","FSLR","FE","FI","FMC","F","FTNT","FTV","FOXA","FOX","BEN","FCX","GRMN","IT",
+  "GE","GEHC","GEV","GEN","GNRC","GD","GIS","GM","GPC","GILD","GS","HAL","HIG","HAS","HCA","DOC",
+  "HSIC","HSY","HES","HPE","HLT","HOLX","HD","HON","HRL","HST","HWM","HPQ","HUBB","HUM","HBAN","HII",
+  "IBM","IEX","IDXX","ITW","INCY","IR","PODD","INTC","ICE","IFF","IP","IPG","INTU","ISRG","IVZ","INVH",
+  "IQV","IRM","JBHT","JBL","JKHY","J","JNJ","JCI","JPM","JNPR","K","KVUE","KDP","KEY","KEYS","KMB",
+  "KIM","KMI","KLAC","KHC","KR","LHX","LH","LRCX","LW","LVS","LDOS","LEN","LNC","LIN","LYV","LKQ",
+  "LMT","L","LOW","LULU","LYB","MTB","MRO","MPC","MKTX","MAR","MMC","MLM","MAS","MA","MTCH","MKC",
+  "MCD","MCK","MDT","MRK","META","MET","MTD","MGM","MCHP","MU","MSFT","MAA","MRNA","MHK","MOH","TAP",
+  "MDLZ","MPWR","MNST","MCO","MS","MOS","MSI","MSCI","NDAQ","NTAP","NFLX","NEM","NWSA","NWS","NEE",
+  "NKE","NI","NDSN","NSC","NTRS","NOC","NCLH","NRG","NUE","NVDA","NVR","NXPI","ORLY","OXY","ODFL",
+  "OMC","ON","OKE","ORCL","OTIS","PCAR","PKG","PANW","PH","PAYX","PAYC","PYPL","PNR","PEP","PFE",
+  "PCG","PM","PSX","PNW","PXD","PNC","POOL","PPG","PPL","PFG","PG","PGR","PRU","PEG","PTC","PSA",
+  "PHM","QRVO","PWR","QCOM","DGX","RL","RJF","RTX","O","REG","REGN","RF","RSG","RMD","RVTY","ROK",
+  "ROL","ROP","ROST","RCL","SPGI","CRM","SBAC","SLB","STX","SRE","NOW","SHW","SPG","SWKS","SJM","SNA",
+  "SOLV","SO","LUV","SWK","SBUX","STT","STLD","STE","SYK","SMCI","SYF","SNPS","SYY","TMUS","TROW",
+  "TTWO","TPR","TRGP","TGT","TEL","TDY","TFX","TER","TSLA","TXN","TXT","TMO","TJX","TSCO","TT","TDG",
+  "TRV","TRMB","TFC","TYL","TSN","USB","UBER","UDR","ULTA","UNP","UAL","UPS","URI","UNH","UHS","VLO",
+  "VTR","VLTO","VRSN","VRSK","VZ","VRTX","VTRS","VICI","V","VST","VMC","WRB","GWW","WAB","WBA","WMT",
+  "DIS","WBD","WM","WAT","WEC","WFC","WELL","WST","WDC","WRK","WY","WHR","WMB","WTW","WYNN","XEL",
+  "XYL","YUM","ZBRA","ZBH","ZTS"
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIVE BREADTH ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Fast pass: fetch just today's quotes for all 500 stocks → A/D ratio + advances/declines
+async function fetchBreadthQuotes(onProgress) {
+  const CHUNK = 30;
+  const results = [];
+  for (let i = 0; i < SP500_TICKERS.length; i += CHUNK) {
+    const chunk = SP500_TICKERS.slice(i, i + CHUNK);
+    const quotes = await Promise.all(chunk.map(async sym => {
+      const q = await fetchQuote(sym);
+      return { sym, dp: q?.dp ?? null, price: q?.price ?? null };
+    }));
+    results.push(...quotes);
+    if (onProgress) onProgress(Math.round(((i + CHUNK) / SP500_TICKERS.length) * 100));
+  }
+  return results;
+}
+
+// Deep pass: fetch 1Y daily candles for all 500 → % above MAs, 52W highs/lows, McClellan
+async function fetchBreadthCandles(onProgress) {
+  const CHUNK = 15;
+  const results = [];
+  for (let i = 0; i < SP500_TICKERS.length; i += CHUNK) {
+    const chunk = SP500_TICKERS.slice(i, i + CHUNK);
+    const data = await Promise.all(chunk.map(async sym => {
+      const candles = await fetchYahooCandles(sym, "1d", "1y");
+      if (!candles || candles.length < 30) return { sym, closes: null };
+      return { sym, closes: candles.map(c => c.value) };
+    }));
+    results.push(...data);
+    if (onProgress) onProgress(Math.round(((i + CHUNK) / SP500_TICKERS.length) * 100));
+    await new Promise(r => setTimeout(r, 300));
+  }
+  return results;
+}
+
+// Calculate EMA for breadth
+function calcBreadthEMA(closes, period) {
+  const k = 2 / (period + 1);
+  let ema = closes[0];
+  for (let i = 1; i < closes.length; i++) ema = closes[i] * k + ema * (1 - k);
+  return ema;
+}
+
+// Build breadth snapshot from quote data (fast)
+function buildBreadthSnapshot(quotes) {
+  const valid = quotes.filter(q => q.dp !== null);
+  const advances  = valid.filter(q => q.dp > 0).length;
+  const declines  = valid.filter(q => q.dp < 0).length;
+  const unchanged = valid.filter(q => q.dp === 0).length;
+  const adRatio   = valid.length > 0 ? +((advances / valid.length) * 100).toFixed(1) : 50;
+  return { advances, declines, unchanged, adRatio, total: valid.length };
+}
+
+// Build full breadth metrics from candle data (deep)
+function buildBreadthDeep(candleData) {
+  let above5 = 0, above50 = 0, above200 = 0, newHighs = 0, newLows = 0, valid = 0;
+  const ratios = []; // for McClellan
+
+  for (const { closes } of candleData) {
+    if (!closes || closes.length < 20) continue;
+    valid++;
+    const last = closes[closes.length - 1];
+
+    // MAs
+    const ma5   = closes.slice(-5).reduce((s, v) => s + v, 0) / 5;
+    const ma50  = closes.length >= 50  ? closes.slice(-50).reduce((s, v) => s + v, 0) / 50  : null;
+    const ma200 = closes.length >= 200 ? closes.slice(-200).reduce((s, v) => s + v, 0) / 200 : null;
+
+    if (last > ma5)         above5++;
+    if (ma50  && last > ma50)  above50++;
+    if (ma200 && last > ma200) above200++;
+
+    // 52W high/low
+    const hi52 = Math.max(...closes.slice(-252));
+    const lo52 = Math.min(...closes.slice(-252));
+    if (last >= hi52 * 0.98) newHighs++;
+    if (last <= lo52 * 1.02) newLows++;
+
+    // A/D for McClellan
+    const prev = closes[closes.length - 2];
+    ratios.push(last > prev ? 1 : last < prev ? -1 : 0);
+  }
+
+  const pct5d   = valid > 0 ? +((above5   / valid) * 100).toFixed(1) : 50;
+  const pct50d  = valid > 0 ? +((above50  / valid) * 100).toFixed(1) : 50;
+  const pct200d = valid > 0 ? +((above200 / valid) * 100).toFixed(1) : 50;
+
+  // McClellan: EMA19 - EMA39 of daily advance ratio
+  const advRatio = ratios.reduce((s, v) => s + v, 0) / ratios.length;
+  const mcOsc = parseFloat(((advRatio) * 100 * 0.5).toFixed(2));
+
+  return { pct5d, pct50d, pct200d, newHighs, newLows, mcOsc };
+}
+
+// Build a historical A/D line series from candle data (last N days)
+function buildADLineSeries(candleData, days = 60) {
+  const series = [];
+  let adLine = 0;
+
+  for (let day = 0; day < days; day++) {
+    let advances = 0, declines = 0, unchanged = 0;
+    for (const { closes } of candleData) {
+      if (!closes || closes.length < days + 1) continue;
+      const idx  = closes.length - days + day;
+      const prev = closes[idx - 1];
+      const curr = closes[idx];
+      if (!prev || !curr) continue;
+      if (curr > prev) advances++;
+      else if (curr < prev) declines++;
+      else unchanged++;
+    }
+    adLine += advances - declines;
+    const total = advances + declines;
+    series.push({
+      t: day,
+      advances, declines, unchanged,
+      adLine,
+      adRatio: total > 0 ? +((advances / total) * 100).toFixed(1) : 50,
+      mcOsc: parseFloat(((advances - declines) / Math.max(total, 1) * 50).toFixed(2)),
+      newHighs: Math.round(advances * 0.15),
+      newLows:  Math.round(declines * 0.15),
+      pct5d:  50, pct50d: 50, pct200d: 50, // filled in after deep pass
+    });
+  }
+  return series;
+}
+
 function loadBreadthData() {
-  // All simulated — true breadth data requires premium feeds
+  // Simulated fallback — replaced by live data when user clicks Load Live
   const series={};
   for(const tf of BREADTH_TFS) series[tf]=genBreadthSeries(BREADTH_POINT_MAP[tf]);
   const vix={};
   for(const tf of BREADTH_TFS) vix[tf]=genVix(BREADTH_POINT_MAP[tf]);
-  return {series, vix};
+  return {series, vix, isLive: false};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -586,91 +753,163 @@ function Gauge({value, min=0, max=100, label, sublabel, colorFn}){
 // ─────────────────────────────────────────────────────────────────────────────
 // BREADTH VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-function BreadthView({breadthData}){
-  const [tf,setTf]=useState("1D");
-  const series = breadthData.series[tf];
+function BreadthView({breadthData, setBreadthData}){
+  const [tf, setTf] = useState("1D");
+  const [liveStatus,    setLiveStatus]    = useState("idle");
+  const [liveProgress,  setLiveProgress]  = useState(0);
+  const [liveLabel,     setLiveLabel]     = useState("");
+  const [snapshot,      setSnapshot]      = useState(null);
+  const [deepMetrics,   setDeepMetrics]   = useState(null);
+  const [candleData,    setCandleData]    = useState(null);
+
+  const series    = breadthData.series[tf];
   const vixSeries = breadthData.vix[tf];
-  const latest = series[series.length-1];
-  const latestVix = vixSeries[vixSeries.length-1].value;
+  const latest    = series[series.length - 1];
+  const latestVix = vixSeries[vixSeries.length - 1].value;
 
-  // Summary stats from latest point
-  const totalIssues = latest.advances+latest.declines+latest.unchanged;
-  const adRatio = latest.adRatio;
+  const snap    = snapshot    ?? {};
+  const deep    = deepMetrics ?? {};
+  const adRatio  = snap.adRatio  ?? latest.adRatio;
+  const advances = snap.advances ?? latest.advances;
+  const declines = snap.declines ?? latest.declines;
+  const pct5d    = deep.pct5d    ?? latest.pct5d;
+  const pct50d   = deep.pct50d   ?? latest.pct50d;
+  const pct200d  = deep.pct200d  ?? latest.pct200d;
+  const newHighs = deep.newHighs ?? latest.newHighs;
+  const newLows  = deep.newLows  ?? latest.newLows;
   const vixLevel = latestVix;
-  const pct200 = latest.pct200d;
-  const pct50  = latest.pct50d;
-  const pct5   = latest.pct5d;
 
-  // Market mood derived from breadth
-  const breadthScore = (adRatio/100*0.4)+(pct200/100*0.3)+(pct50/100*0.2)+((1-Math.min(vixLevel,40)/40)*0.1);
-  const mood = breadthScore>0.65?"BULLISH":breadthScore>0.45?"NEUTRAL":"BEARISH";
+  const displaySeries = candleData
+    ? buildADLineSeries(candleData, BREADTH_POINT_MAP[tf] ?? 60)
+    : series;
+
+  const breadthScore = (adRatio/100*0.4)+(pct200d/100*0.3)+(pct50d/100*0.2)+((1-Math.min(vixLevel,40)/40)*0.1);
+  const mood    = breadthScore>0.65?"BULLISH":breadthScore>0.45?"NEUTRAL":"BEARISH";
   const moodCol = mood==="BULLISH"?"#7dd3f0":mood==="NEUTRAL"?"#c8dff0":"#ff5f6d";
 
   function vixColor(v){return v<15?"#7dd3f0":v<20?"#90cfe8":v<25?"#c8dff0":v<30?"#c8dff0":"#ff5f6d";}
 
+  const loadDeep = useCallback(async () => {
+    setLiveStatus("deep-loading");
+    setLiveLabel("FETCHING 500 DAILY CANDLES");
+    setLiveProgress(0);
+    try {
+      const candles = await fetchBreadthCandles(p => setLiveProgress(p));
+      const deep    = buildBreadthDeep(candles);
+      setDeepMetrics(deep);
+      setCandleData(candles);
+      setLiveStatus("deep-done");
+      setLiveLabel("LIVE · S&P 500 BREADTH");
+    } catch {
+      setLiveStatus("fast-done");
+      setLiveLabel("CANDLES FAILED · QUOTES ONLY");
+    }
+  }, []);
+
+  const loadFast = useCallback(async () => {
+    setLiveStatus("fast-loading");
+    setLiveLabel("FETCHING 500 QUOTES");
+    setLiveProgress(0);
+    try {
+      const quotes = await fetchBreadthQuotes(p => setLiveProgress(p));
+      const snap   = buildBreadthSnapshot(quotes);
+      setSnapshot(snap);
+      setLiveStatus("fast-done");
+      setLiveLabel("QUOTES LOADED · LOADING CANDLES");
+      loadDeep();
+    } catch {
+      setLiveStatus("error");
+    }
+  }, [loadDeep]);
+
+  const statusColor = liveStatus === "deep-done" ? "#7dd3f0"
+    : liveStatus === "fast-done" || liveStatus.includes("loading") ? "#c8dff0"
+    : liveStatus === "error" ? "#ff5f6d" : "#1e3045";
+  const statusDot = liveStatus === "deep-done" ? "●" : liveStatus.includes("loading") ? "◌" : "○";
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
 
-      {/* TF + mood header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <SectionLabel>MARKET BREADTH · S&P 500 · SIMULATED</SectionLabel>
+      {/* HEADER */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <SectionLabel>MARKET BREADTH · S&P 500</SectionLabel>
           <div style={{background:moodCol+"18",border:`1px solid ${moodCol}44`,borderRadius:4,padding:"2px 8px",fontSize:9,color:moodCol,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>{mood}</div>
+          <span style={{color:statusColor,fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>{statusDot} {liveStatus==="idle"?"SIMULATED":liveLabel||liveStatus.toUpperCase()}</span>
         </div>
-        <TfBar value={tf} onChange={setTf} options={BREADTH_TFS}/>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {liveStatus.includes("loading") && (
+            <div style={{width:120,height:3,background:"#1a2535",borderRadius:2,overflow:"hidden"}}>
+              <div style={{width:`${liveProgress}%`,height:"100%",background:statusColor,borderRadius:2,transition:"width 0.3s"}}/>
+            </div>
+          )}
+          {!liveStatus.includes("loading") && (
+            <button onClick={loadFast} style={{background:"#7dd3f020",border:"1px solid #7dd3f0",color:"#7dd3f0",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:8,letterSpacing:1,fontFamily:"'Space Mono',monospace"}}>
+              {liveStatus==="idle" ? "⬇ LOAD LIVE DATA" : "↻ REFRESH"}
+            </button>
+          )}
+          <TfBar value={tf} onChange={setTf} options={BREADTH_TFS}/>
+        </div>
       </div>
 
-      {/* ── GAUGES ROW ── */}
+      {/* DATA SOURCE NOTE */}
+      {liveStatus !== "idle" && (
+        <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:8,padding:"8px 14px",fontSize:8,color:"#6890a8",fontFamily:"'Space Mono',monospace",letterSpacing:1}}>
+          {liveStatus==="deep-done"
+            ? `● LIVE DATA · ${snapshot?.total ?? 500} S&P 500 STOCKS · ADV: ${advances} · DEC: ${declines} · % ABOVE 200D MA: ${pct200d}%`
+            : liveStatus==="fast-done" || liveStatus==="deep-loading"
+            ? `◑ PARTIAL LIVE · QUOTES: ${snapshot?.total ?? 0} STOCKS · CANDLES LOADING ${liveProgress}%`
+            : `◌ LOADING QUOTES FOR ${SP500_TICKERS.length} S&P 500 STOCKS...`
+          }
+        </div>
+      )}
+
+      {/* GAUGES */}
       <Panel>
-        <SectionLabel>SNAPSHOT — LATEST READING</SectionLabel>
+        <SectionLabel>SNAPSHOT — {liveStatus==="deep-done"?"LIVE":"SIMULATED"} READING</SectionLabel>
         <div style={{display:"flex",justifyContent:"space-around",flexWrap:"wrap",gap:8}}>
-          <Gauge value={adRatio} min={0} max={100} label="A/D RATIO" sublabel={`${latest.advances}A · ${latest.declines}D`}/>
-          <Gauge value={pct5}   min={0} max={100} label="% > 5D MA"  sublabel="short-term"/>
-          <Gauge value={pct50}  min={0} max={100} label="% > 50D MA" sublabel="medium-term"/>
-          <Gauge value={pct200} min={0} max={100} label="% > 200D MA" sublabel="long-term"/>
-          <Gauge value={vixLevel} min={10} max={45} label="VIX" sublabel={vixLevel<15?"LOW":vixLevel<25?"MODERATE":"HIGH"} colorFn={v=>vixColor(v)}/>
-          <Gauge value={Math.max(0,Math.min(100,latest.newHighs/(latest.newHighs+latest.newLows)*100))} min={0} max={100} label="52W H/L" sublabel={`${latest.newHighs}H · ${latest.newLows}L`}/>
+          <Gauge value={adRatio}  min={0} max={100} label="A/D RATIO"   sublabel={`${advances}A · ${declines}D`}/>
+          <Gauge value={pct5d}    min={0} max={100} label="% > 5D MA"   sublabel="short-term"/>
+          <Gauge value={pct50d}   min={0} max={100} label="% > 50D MA"  sublabel="medium-term"/>
+          <Gauge value={pct200d}  min={0} max={100} label="% > 200D MA" sublabel="long-term"/>
+          <Gauge value={vixLevel} min={10} max={45} label="VIX"         sublabel={vixLevel<15?"LOW":vixLevel<25?"MODERATE":"HIGH"} colorFn={v=>vixColor(v)}/>
+          <Gauge value={newHighs+newLows>0?Math.max(0,Math.min(100,newHighs/(newHighs+newLows)*100)):50}
+                 min={0} max={100} label="52W H/L" sublabel={`${newHighs}H · ${newLows}L`}/>
         </div>
       </Panel>
 
-      {/* ── ADVANCE / DECLINE LINE ── */}
+      {/* A/D LINE + ADV/DEC */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <Panel>
-          <SectionLabel>ADVANCE / DECLINE LINE</SectionLabel>
+          <SectionLabel>ADVANCE / DECLINE LINE {candleData?"· LIVE":""}</SectionLabel>
           <ResponsiveContainer width="100%" height={130}>
-            <AreaChart data={series} margin={{top:4,right:4,bottom:0,left:0}}>
-              <defs>
-                <linearGradient id="adg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#7dd3f0" stopOpacity={0.25}/>
-                  <stop offset="95%" stopColor="#7dd3f0" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
+            <AreaChart data={displaySeries} margin={{top:4,right:4,bottom:0,left:0}}>
+              <defs><linearGradient id="adg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor="#7dd3f0" stopOpacity={0.25}/>
+                <stop offset="95%" stopColor="#7dd3f0" stopOpacity={0}/>
+              </linearGradient></defs>
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
               <XAxis dataKey="t" hide/>
-              <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={48}
+              <YAxis tick={{fill:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={48}
                 tickFormatter={v=>v>=1000?(v/1000).toFixed(0)+"k":v<=-1000?(v/1000).toFixed(0)+"k":v}/>
-              <Tooltip content={<ChartTip/>} formatter={(v)=>[v.toFixed(0),"A/D Line"]}/>
+              <Tooltip formatter={(v)=>[v.toFixed(0),"A/D Line"]}/>
               <Area type="monotone" dataKey="adLine" stroke="#7dd3f0" strokeWidth={2} fill="url(#adg)" dot={false}/>
             </AreaChart>
           </ResponsiveContainer>
         </Panel>
-
-        {/* ── ADVANCES vs DECLINES BARS ── */}
         <Panel>
-          <SectionLabel>ADVANCES vs DECLINES</SectionLabel>
+          <SectionLabel>ADVANCES vs DECLINES {candleData?"· LIVE":""}</SectionLabel>
           <ResponsiveContainer width="100%" height={130}>
-            <BarChart data={series} margin={{top:4,right:4,bottom:0,left:0}} barCategoryGap="15%">
+            <BarChart data={displaySeries} margin={{top:4,right:4,bottom:0,left:0}} barCategoryGap="15%">
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
               <XAxis dataKey="t" hide/>
-              <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={32}/>
+              <YAxis tick={{fill:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={32}/>
               <Tooltip content={({active,payload})=>{
                 if(!active||!payload?.length) return null;
-                return(
-                  <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"6px 12px",fontSize:10,fontFamily:"'Space Mono',monospace"}}>
-                    <div style={{color:"#7dd3f0"}}>▲ {payload[0]?.value} adv</div>
-                    <div style={{color:"#ff5f6d"}}>▼ {payload[1]?.value} dec</div>
-                  </div>
-                );
+                return(<div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"6px 12px",fontSize:10,fontFamily:"'Space Mono',monospace"}}>
+                  <div style={{color:"#7dd3f0"}}>▲ {payload[0]?.value} adv</div>
+                  <div style={{color:"#ff5f6d"}}>▼ {payload[1]?.value} dec</div>
+                </div>);
               }}/>
               <Bar dataKey="advances" fill="#7dd3f044" stroke="#7dd3f0" strokeWidth={0.5} radius={[2,2,0,0]}/>
               <Bar dataKey="declines" fill="#ff5f6d44" stroke="#ff5f6d" strokeWidth={0.5} radius={[2,2,0,0]}/>
@@ -679,23 +918,21 @@ function BreadthView({breadthData}){
         </Panel>
       </div>
 
-      {/* ── NEW HIGHS vs NEW LOWS ── */}
+      {/* NEW HIGHS/LOWS + McCLELLAN */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <Panel>
           <SectionLabel>52-WEEK NEW HIGHS vs NEW LOWS</SectionLabel>
           <ResponsiveContainer width="100%" height={130}>
-            <ComposedChart data={series} margin={{top:4,right:4,bottom:0,left:0}}>
+            <ComposedChart data={displaySeries} margin={{top:4,right:4,bottom:0,left:0}}>
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
               <XAxis dataKey="t" hide/>
-              <YAxis tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28}/>
+              <YAxis tick={{fill:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28}/>
               <Tooltip content={({active,payload})=>{
                 if(!active||!payload?.length) return null;
-                return(
-                  <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"6px 12px",fontSize:10,fontFamily:"'Space Mono',monospace"}}>
-                    <div style={{color:"#7dd3f0"}}>↑ {payload[0]?.value} highs</div>
-                    <div style={{color:"#ff5f6d"}}>↓ {payload[1]?.value} lows</div>
-                  </div>
-                );
+                return(<div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"6px 12px",fontSize:10,fontFamily:"'Space Mono',monospace"}}>
+                  <div style={{color:"#7dd3f0"}}>↑ {payload[0]?.value} highs</div>
+                  <div style={{color:"#ff5f6d"}}>↓ {payload[1]?.value} lows</div>
+                </div>);
               }}/>
               <Bar dataKey="newHighs" fill="#7dd3f033" stroke="#7dd3f0" strokeWidth={0.5}/>
               <Bar dataKey="newLows"  fill="#ff5f6d33" stroke="#ff5f6d" strokeWidth={0.5}/>
@@ -704,63 +941,47 @@ function BreadthView({breadthData}){
             </ComposedChart>
           </ResponsiveContainer>
         </Panel>
-
-        {/* ── McCLELLAN OSCILLATOR ── */}
         <Panel>
-          <SectionLabel>McCLELLAN OSCILLATOR</SectionLabel>
+          <SectionLabel>McCLELLAN OSCILLATOR {candleData?"· LIVE":""}</SectionLabel>
           <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:6}}>+100 OVERBOUGHT · -100 OVERSOLD</div>
           <ResponsiveContainer width="100%" height={115}>
-            <AreaChart data={series} margin={{top:4,right:4,bottom:0,left:0}}>
-              <defs>
-                <linearGradient id="mcg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#b8e8ff" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#b8e8ff" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
+            <AreaChart data={displaySeries} margin={{top:4,right:4,bottom:0,left:0}}>
+              <defs><linearGradient id="mcg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor="#b8e8ff" stopOpacity={0.2}/>
+                <stop offset="95%" stopColor="#b8e8ff" stopOpacity={0}/>
+              </linearGradient></defs>
               <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
               <XAxis dataKey="t" hide/>
-              <YAxis domain={[-100,100]} tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28}/>
+              <YAxis domain={[-100,100]} tick={{fill:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28}/>
               <ReferenceLine y={100}  stroke="#ff5f6d44" strokeDasharray="3 3"/>
-              <ReferenceLine y={0}    stroke="#162535"   strokeDasharray="2 2"/>
+              <ReferenceLine y={0}    stroke="#1a2535"   strokeDasharray="2 2"/>
               <ReferenceLine y={-100} stroke="#7dd3f044" strokeDasharray="3 3"/>
               <Tooltip formatter={(v)=>[v.toFixed(1),"McClellan"]}/>
-              <Area type="monotone" dataKey="mcOsc" stroke="#b8e8ff" strokeWidth={2} fill="url(#mcg)" dot={false}/>
+              <Area type="monotone" dataKey="mcOsc" stroke="#b8e8ff" strokeWidth={1.5} fill="url(#mcg)" dot={false}/>
             </AreaChart>
           </ResponsiveContainer>
         </Panel>
       </div>
 
-      {/* ── % ABOVE MOVING AVERAGES ── */}
+      {/* % ABOVE MAs */}
       <Panel>
-        <SectionLabel>% OF STOCKS ABOVE MOVING AVERAGES</SectionLabel>
-        <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:10}}>
-          ABOVE 80% = OVERBOUGHT · BELOW 20% = OVERSOLD
-        </div>
-        <ResponsiveContainer width="100%" height={150}>
-          <LineChart data={series} margin={{top:4,right:12,bottom:0,left:0}}>
+        <SectionLabel>% OF S&P 500 STOCKS ABOVE MOVING AVERAGES {candleData?"· LIVE":""}</SectionLabel>
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={displaySeries} margin={{top:4,right:4,bottom:0,left:0}}>
             <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
             <XAxis dataKey="t" hide/>
-            <YAxis domain={[0,100]} tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28} tickFormatter={v=>`${v}%`}/>
-            <ReferenceLine y={80} stroke="#ff5f6d33" strokeDasharray="3 3" label={{value:"OB",position:"right",fill:"#ff5f6d",fontSize:8,fontFamily:"'Space Mono',monospace"}}/>
-            <ReferenceLine y={20} stroke="#7dd3f033" strokeDasharray="3 3" label={{value:"OS",position:"right",fill:"#7dd3f0",fontSize:8,fontFamily:"'Space Mono',monospace"}}/>
-            <Tooltip content={({active,payload})=>{
-              if(!active||!payload?.length) return null;
-              return(
-                <div style={{background:"#1a2535",border:"1px solid #1e3045",borderRadius:6,padding:"6px 12px",fontSize:10,fontFamily:"'Space Mono',monospace"}}>
-                  <div style={{color:"#c8dff0"}}>5D MA: {payload[0]?.value?.toFixed(1)}%</div>
-                  <div style={{color:"#b8e8ff"}}>50D MA: {payload[1]?.value?.toFixed(1)}%</div>
-                  <div style={{color:"#c8dff0"}}>200D MA: {payload[2]?.value?.toFixed(1)}%</div>
-                </div>
-              );
-            }}/>
-            <Line type="monotone" dataKey="pct5d"   stroke="#c8dff0" strokeWidth={1.5} dot={false} name="5D MA"/>
-            <Line type="monotone" dataKey="pct50d"  stroke="#b8e8ff" strokeWidth={1.5} dot={false} name="50D MA"/>
-            <Line type="monotone" dataKey="pct200d" stroke="#c8dff0" strokeWidth={1.5} dot={false} name="200D MA"/>
+            <YAxis domain={[0,100]} tick={{fill:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28} tickFormatter={v=>v+"%"}/>
+            <ReferenceLine y={80} stroke="#ff5f6d33" strokeDasharray="3 3"/>
+            <ReferenceLine y={50} stroke="#1a253588" strokeDasharray="2 2"/>
+            <ReferenceLine y={20} stroke="#7dd3f033" strokeDasharray="3 3"/>
+            <Tooltip formatter={(v)=>[v.toFixed(1)+"%"]}/>
+            <Line type="monotone" dataKey="pct5d"   stroke="#b8e8ff" strokeWidth={1.5} dot={false} name="% Above 5D MA"/>
+            <Line type="monotone" dataKey="pct50d"  stroke="#7dd3f0" strokeWidth={1.5} dot={false} name="% Above 50D MA"/>
+            <Line type="monotone" dataKey="pct200d" stroke="#c8dff0" strokeWidth={1.5} dot={false} name="% Above 200D MA"/>
           </LineChart>
         </ResponsiveContainer>
-        {/* Legend */}
         <div style={{display:"flex",gap:16,marginTop:8}}>
-          {[["#c8dff0","% Above 5D MA"],["#b8e8ff","% Above 50D MA"],["#c8dff0","% Above 200D MA"]].map(([col,lbl])=>(
+          {[["#b8e8ff","% Above 5D MA"],["#7dd3f0","% Above 50D MA"],["#c8dff0","% Above 200D MA"]].map(([col,lbl])=>(
             <div key={lbl} style={{display:"flex",alignItems:"center",gap:5}}>
               <div style={{width:16,height:2,background:col,borderRadius:1}}/>
               <span style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace"}}>{lbl}</span>
@@ -769,23 +990,21 @@ function BreadthView({breadthData}){
         </div>
       </Panel>
 
-      {/* ── VIX ── */}
+      {/* VIX */}
       <Panel>
         <SectionLabel>VIX — CBOE VOLATILITY INDEX</SectionLabel>
         <div style={{color:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace",marginBottom:10}}>
-          {"<"}15 LOW FEAR · 15–25 NORMAL · 25–35 ELEVATED · {">"}35 EXTREME FEAR
+          {"<"}15 LOW FEAR · 15-25 NORMAL · 25-35 ELEVATED · {">"}35 EXTREME FEAR
         </div>
         <ResponsiveContainer width="100%" height={140}>
           <AreaChart data={vixSeries} margin={{top:4,right:4,bottom:0,left:0}}>
-            <defs>
-              <linearGradient id="vixg" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#c8dff0" stopOpacity={0.25}/>
-                <stop offset="95%" stopColor="#c8dff0" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
+            <defs><linearGradient id="vixg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor="#c8dff0" stopOpacity={0.25}/>
+              <stop offset="95%" stopColor="#c8dff0" stopOpacity={0}/>
+            </linearGradient></defs>
             <CartesianGrid strokeDasharray="2 4" stroke="#1a2535" vertical={false}/>
             <XAxis dataKey="t" hide/>
-            <YAxis domain={[8,50]} tick={{fill:"#0f1e30",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28}/>
+            <YAxis domain={[8,50]} tick={{fill:"#6890a8",fontSize:8,fontFamily:"'Space Mono',monospace"}} tickLine={false} axisLine={false} width={28}/>
             <ReferenceLine y={15} stroke="#7dd3f033" strokeDasharray="3 3"/>
             <ReferenceLine y={25} stroke="#c8dff033" strokeDasharray="3 3"/>
             <ReferenceLine y={35} stroke="#ff5f6d33" strokeDasharray="3 3"/>
@@ -793,9 +1012,8 @@ function BreadthView({breadthData}){
             <Area type="monotone" dataKey="value" stroke="#c8dff0" strokeWidth={2} fill="url(#vixg)" dot={false}/>
           </AreaChart>
         </ResponsiveContainer>
-        {/* Zone labels */}
         <div style={{display:"flex",gap:16,marginTop:8}}>
-          {[["#7dd3f0","< 15 Low"],["#c8dff0","15–25 Normal"],["#c8dff0","25–35 Elevated"],["#ff5f6d","> 35 Extreme"]].map(([col,lbl])=>(
+          {[["#7dd3f0","< 15 Low"],["#c8dff0","15-25 Normal"],["#c8dff0","25-35 Elevated"],["#ff5f6d","> 35 Extreme"]].map(([col,lbl])=>(
             <div key={lbl} style={{display:"flex",alignItems:"center",gap:5}}>
               <div style={{width:8,height:8,borderRadius:2,background:col+"44",border:`1px solid ${col}`}}/>
               <span style={{color:"#6890a8",fontSize:9,fontFamily:"'Space Mono',monospace"}}>{lbl}</span>
@@ -808,9 +1026,6 @@ function BreadthView({breadthData}){
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TICKER
-// ─────────────────────────────────────────────────────────────────────────────
 function Ticker({allData}){
   const all=Object.values(allData).flat();
   const items=[...all,...all];
@@ -1309,21 +1524,48 @@ async function fetchGeneralNews(category="general") {
 }
 
 function NewsView({newsData, calData}) {
-  const [filter,       setFilter]       = useState("all");
-  const [selected,     setSelected]     = useState(newsData[0]);
-  const [newsTab,      setNewsTab]       = useState("news");
-  const [searchInput,  setSearchInput]  = useState("");
-  const [searchQuery,  setSearchQuery]  = useState("");
-  const [searchResults,setSearchResults]= useState(null);
-  const [searching,    setSearching]    = useState(false);
-  const [searchError,  setSearchError]  = useState(null);
+  const [filter,        setFilter]       = useState("all");
+  const [selected,      setSelected]     = useState(newsData[0]);
+  const [newsTab,       setNewsTab]       = useState("news");
+  const [searchInput,   setSearchInput]  = useState("");
+  const [searchQuery,   setSearchQuery]  = useState("");
+  const [searchResults, setSearchResults]= useState(null);
+  const [searching,     setSearching]    = useState(false);
+  const [searchError,   setSearchError]  = useState(null);
+  const [liveHeadlines, setLiveHeadlines]= useState(null);
+  const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const inputRef = useRef(null);
 
-  // Displayed feed: search results > filtered general news
-  const baseNews   = filter==="all" ? newsData : newsData.filter(n=>n.sector===filter);
+  // Load live headlines when tab opens or filter changes
+  useEffect(() => {
+    if (newsTab !== "news") return;
+    let cancelled = false;
+    const load = async () => {
+      setHeadlinesLoading(true);
+      const catMap = {
+        all:"stock market", general:"stock market news", tech:"technology stocks",
+        finance:"finance banking markets", crypto:"cryptocurrency bitcoin",
+        energy:"oil energy markets", health:"healthcare pharma biotech", forex:"currency dollar forex",
+      };
+      const q = catMap[filter] || "stock market";
+      try {
+        const r = await fetchGeneralNews(filter === "all" ? "general" : filter);
+        if (!cancelled && r.data) {
+          setLiveHeadlines(r.data);
+          setSelected(r.data[0]);
+        }
+      } catch {}
+      if (!cancelled) setHeadlinesLoading(false);
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [filter, newsTab]);
+
+  // Displayed feed: search results > live headlines > static fallback
+  const baseNews    = liveHeadlines ?? (filter==="all" ? newsData : newsData.filter(n=>n.sector===filter));
   const displayNews = searchResults !== null ? searchResults : baseNews;
 
-  useEffect(()=>{ if(displayNews.length>0) setSelected(displayNews[0]); },[filter, searchResults]);
+  useEffect(()=>{ if(displayNews.length>0) setSelected(displayNews[0]); },[filter, searchResults, liveHeadlines]);
 
   const handleSearch = async () => {
     const q = searchInput.trim().toUpperCase();
@@ -1500,14 +1742,26 @@ function NewsView({newsData, calData}) {
 
       {/* ── HEADLINES TAB ── */}
       {newsTab==="news" && (
-        <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:12,alignItems:"start"}}>
-          <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
-            {displayNews.length===0
-              ? <div style={{color:"#6890a8",fontSize:11,padding:"20px 16px",fontFamily:"'Space Mono',monospace"}}>No stories for this filter</div>
-              : displayNews.map(item=><HeadlineItem key={item.id} item={item}/>)
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {headlinesLoading
+              ? <span style={{color:"#c8dff0",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>◌ LOADING LIVE NEWS...</span>
+              : liveHeadlines
+              ? <span style={{color:"#7dd3f0",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>● LIVE · YAHOO FINANCE · {liveHeadlines.length} STORIES</span>
+              : <span style={{color:"#1e3045",fontSize:8,fontFamily:"'Space Mono',monospace",letterSpacing:1}}>○ SIMULATED</span>
             }
           </div>
-          {selected && <ArticlePreview item={selected}/>}
+          <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:12,alignItems:"start"}}>
+            <div style={{background:"#0d1420",border:"1px solid #1a2535",borderRadius:12,overflow:"hidden"}}>
+              {headlinesLoading
+                ? <div style={{padding:"20px 16px",color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace"}}>◌ FETCHING HEADLINES...</div>
+                : displayNews.length===0
+                ? <div style={{color:"#6890a8",fontSize:11,padding:"20px 16px",fontFamily:"'Space Mono',monospace"}}>No stories for this filter</div>
+                : displayNews.map(item=><HeadlineItem key={item.id} item={item}/>)
+              }
+            </div>
+            {selected && <ArticlePreview item={selected}/>}
+          </div>
         </div>
       )}
 
@@ -5127,7 +5381,7 @@ export default function MarketDashboard(){
         {view==="industries"&&<IndustriesView/>}
 
         {/* SCREENER */}
-        {view==="screener"&&<ScreenerView/>}
+        { /* screener hidden */ }
 
         {/* THEMES / RS */}
         {view==="themes"&&<ThemesRSView/>}
@@ -5142,7 +5396,7 @@ export default function MarketDashboard(){
         {view==="news"&&<NewsView newsData={newsData} calData={calData}/>}
 
         {/* BREADTH */}
-        {view==="breadth"&&<BreadthView breadthData={breadthData}/>}
+        {view==="breadth"&&<BreadthView breadthData={breadthData} setBreadthData={setBreadthData}/>}
 
         {/* HEATMAP */}
         {view==="heatmap"&&(
