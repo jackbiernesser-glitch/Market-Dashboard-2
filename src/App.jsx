@@ -158,6 +158,19 @@ const NEWS_FILTERS = [
   {key:"forex",    label:"Forex"},
 ];
 
+const TAG_COL = {
+  MACRO:    "#f59e0b",
+  TECH:     "#7dd3f0",
+  MARKETS:  "#c8dff0",
+  ENERGY:   "#34d399",
+  CRYPTO:   "#a78bfa",
+  HEALTH:   "#f472b6",
+  FOREX:    "#60a5fa",
+  EARNINGS: "#fb923c",
+  RATE:     "#e879f9",
+  DEFAULT:  "#6890a8",
+};
+
 function genCalendar() {
   return [
     {id:"e1",  time:"08:30", date:"Today",    impact:"high",   title:"Initial Jobless Claims",        actual:"215K",  forecast:"220K", prior:"218K"},
@@ -418,6 +431,64 @@ async function fetchProfile(symbol) {
       finnhubIndustry:         ap.industry,
       sector:                  ap.sector,
       marketCapitalization:    pr.marketCap?.raw ? pr.marketCap.raw / 1e6 : null,
+    };
+  } catch { return null; }
+}
+
+// Fetch news for a specific ticker from Yahoo Finance
+async function fetchTickerNews(symbol) {
+  try {
+    const r = await fetch(`${YF_PROXY}?path=v1/finance/search&q=${encodeURIComponent(symbol)}&newsCount=20&quotesCount=0`);
+    const d = await r.json();
+    const items = d?.news ?? [];
+    if (!items.length) return null;
+    return {
+      isLive: true,
+      data: items.map((n, i) => ({
+        id:      `ln-${i}`,
+        title:   n.title,
+        summary: n.title,
+        source:  n.publisher ?? "Yahoo Finance",
+        time:    n.providerPublishTime ? new Date(n.providerPublishTime * 1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : "—",
+        tag:     symbol.toUpperCase(),
+        sector:  "general",
+        url:     n.link ?? "#",
+        isLive:  true,
+      }))
+    };
+  } catch { return null; }
+}
+
+// Fetch general/category news from Yahoo Finance
+async function fetchGeneralNews(category = "general") {
+  try {
+    const queries = {
+      general:  "stock market",
+      tech:     "technology stocks",
+      finance:  "financial markets",
+      energy:   "energy oil commodities",
+      crypto:   "cryptocurrency bitcoin",
+      macro:    "federal reserve economy inflation",
+    };
+    const q = queries[category] ?? queries.general;
+    const r = await fetch(`${YF_PROXY}?path=v1/finance/search&q=${encodeURIComponent(q)}&newsCount=25&quotesCount=0`);
+    const d = await r.json();
+    const items = d?.news ?? [];
+    if (!items.length) return null;
+    const tagMap = { tech:"TECH", finance:"MARKETS", energy:"ENERGY", crypto:"CRYPTO", macro:"MACRO", general:"MARKETS" };
+    return {
+      isLive: true,
+      data: items.map((n, i) => ({
+        id:      `gn-${i}`,
+        title:   n.title,
+        summary: n.title,
+        source:  n.publisher ?? "Yahoo Finance",
+        time:    n.providerPublishTime ? new Date(n.providerPublishTime * 1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : "—",
+        tag:     tagMap[category] ?? "MARKETS",
+        sector:  category,
+        url:     n.link ?? "#",
+        isLive:  true,
+      }))
     };
   } catch { return null; }
 }
@@ -1478,7 +1549,7 @@ function NewsView({newsData, calData}) {
       const q = catMap[filter] || "stock market";
       try {
         const r = await fetchGeneralNews(filter === "all" ? "general" : filter);
-        if (!cancelled && r.data) {
+        if (!cancelled && r?.data) {
           setLiveHeadlines(r.data);
           setSelected(r.data[0]);
         }
@@ -1512,19 +1583,21 @@ function NewsView({newsData, calData}) {
     } else {
       result = await fetchTickerNews(q);
       // If empty but no network error, also try general news as fallback
-      if (result.error === "empty" || !result.data) {
+      if (!result || result.error === "empty" || !result?.data) {
         const gen = await fetchGeneralNews("general");
-        if (gen.data) {
-          // filter by keyword match in headline
+        if (gen?.data) {
           const filtered = gen.data.filter(n =>
-            n.title.toUpperCase().includes(q) || n.summary.toUpperCase().includes(q)
+            n.title.toUpperCase().includes(q) || n.summary?.toUpperCase().includes(q)
           );
           if (filtered.length > 0) result = { data: filtered, error: null };
         }
       }
     }
 
-    if (result.error && result.error !== "empty") {
+    if (!result) {
+      setSearchError(`No results found for "${q}". Try a major US ticker like AAPL, TSLA, MSFT, or AMZN.`);
+      setSearchResults([]);
+    } else if (result.error && result.error !== "empty") {
       setSearchError(`API error: ${result.error}. This may be a network restriction in the preview — it will work when deployed to Vercel.`);
       setSearchResults([]);
     } else if (!result.data || result.data.length === 0) {
@@ -4615,34 +4688,43 @@ function IndustriesView({ liveQuotes, thematicLoading }) {
 // FETCH HELPERS FOR NEW VIEWS
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchOptionsChain(symbol) {
-  try {
-    const r = await fetch(`${YF_PROXY}?path=v7/finance/options/${encodeURIComponent(symbol)}`);
-    const d = await r.json();
-    const result = d?.optionChain?.result?.[0];
-    if (!result) return null;
-    const quote = result.quote;
-    const opts  = result.options?.[0];
-    return {
-      price:      quote?.regularMarketPrice ?? null,
-      expDates:   result.expirationDates ?? [],
-      calls:      opts?.calls ?? [],
-      puts:       opts?.puts  ?? [],
-    };
-  } catch { return null; }
+  // Try both v8 and v7 endpoints as Yahoo has changed this over time
+  for (const ver of ["v8","v7"]) {
+    try {
+      const r = await fetch(`${YF_PROXY}?path=${ver}/finance/options/${encodeURIComponent(symbol)}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const result = d?.optionChain?.result?.[0];
+      if (!result) continue;
+      const quote = result.quote;
+      const opts  = result.options?.[0];
+      return {
+        price:      quote?.regularMarketPrice ?? null,
+        expDates:   result.expirationDates ?? [],
+        calls:      opts?.calls ?? [],
+        puts:       opts?.puts  ?? [],
+      };
+    } catch {}
+  }
+  return null;
 }
 
 async function fetchOptionsForExp(symbol, expTimestamp) {
-  try {
-    const r = await fetch(`${YF_PROXY}?path=v7/finance/options/${encodeURIComponent(symbol)}&date=${expTimestamp}`);
-    const d = await r.json();
-    const opts = d?.optionChain?.result?.[0]?.options?.[0];
-    return { calls: opts?.calls ?? [], puts: opts?.puts ?? [] };
-  } catch { return null; }
+  for (const ver of ["v8","v7"]) {
+    try {
+      const r = await fetch(`${YF_PROXY}?path=${ver}/finance/options/${encodeURIComponent(symbol)}&date=${expTimestamp}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const opts = d?.optionChain?.result?.[0]?.options?.[0];
+      if (opts) return { calls: opts.calls ?? [], puts: opts.puts ?? [] };
+    } catch {}
+  }
+  return { calls: [], puts: [] };
 }
 
 async function fetchEarningsCalendar(symbol) {
   try {
-    const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(symbol)}&modules=earnings,earningsHistory,calendarEvents`);
+    const r = await fetch(`${YF_PROXY}?path=v10/finance/quoteSummary/${encodeURIComponent(symbol)}&modules=earnings%2CearningsHistory%2CcalendarEvents%2CearningsTrend`);
     const d = await r.json();
     const s = d?.quoteSummary?.result?.[0];
     if (!s) return null;
@@ -4650,6 +4732,7 @@ async function fetchEarningsCalendar(symbol) {
       earningsHistory: s.earningsHistory?.history ?? [],
       nextEarnings:    s.calendarEvents?.earnings ?? null,
       earningsChart:   s.earnings?.earningsChart ?? null,
+      earningsTrend:   s.earningsTrend?.trend ?? [],
     };
   } catch { return null; }
 }
@@ -5009,6 +5092,7 @@ function OptionsView() {
   const [symbol,   setSymbol]   = useState("AAPL");
   const [data,     setData]     = useState(null);
   const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
   const [expIdx,   setExpIdx]   = useState(0);
   const [side,     setSide]     = useState("both");
   const [expDates, setExpDates] = useState([]);
@@ -5017,9 +5101,13 @@ function OptionsView() {
   const search = async (sym) => {
     const s = sym.trim().toUpperCase();
     if (!s) return;
-    setLoading(true); setData(null); setExpIdx(0);
+    setLoading(true); setData(null); setExpIdx(0); setError(null);
     const raw = await fetchOptionsChain(s);
-    if (raw) { setData(raw); setExpDates(raw.expDates); setSymbol(s); }
+    if (raw && raw.expDates.length > 0) {
+      setData(raw); setExpDates(raw.expDates); setSymbol(s);
+    } else {
+      setError(`No options data found for ${s}. Try a large-cap US equity like AAPL, TSLA, or SPY.`);
+    }
     setLoading(false);
   };
 
@@ -5069,6 +5157,7 @@ function OptionsView() {
       </div>
 
       {loading && <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>◌ FETCHING OPTIONS CHAIN…</div>}
+      {!loading && error && <div style={{color:"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>{error}</div>}
 
       {!loading && data && (
         <>
@@ -5152,14 +5241,19 @@ function EarningsView() {
   const [symbol,  setSymbol]  = useState("AAPL");
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
   const POPULAR = ["AAPL","MSFT","NVDA","META","GOOGL","AMZN","TSLA","JPM","V","NFLX"];
 
   const search = async (sym) => {
     const s = sym.trim().toUpperCase();
     if (!s) return;
-    setLoading(true); setData(null);
+    setLoading(true); setData(null); setError(null);
     const raw = await fetchEarningsCalendar(s);
-    if (raw) { setData(raw); setSymbol(s); }
+    if (raw && (raw.earningsHistory?.length > 0 || raw.earningsChart || raw.nextEarnings)) {
+      setData(raw); setSymbol(s);
+    } else {
+      setError(`No earnings data found for ${s}. Try a major US stock like AAPL, MSFT, or NVDA.`);
+    }
     setLoading(false);
   };
 
@@ -5217,6 +5311,7 @@ function EarningsView() {
       </div>
 
       {loading && <div style={{color:"#6890a8",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>◌ FETCHING EARNINGS DATA…</div>}
+      {!loading && error && <div style={{color:"#ff5f6d",fontSize:10,fontFamily:"'Space Mono',monospace",padding:40,textAlign:"center"}}>{error}</div>}
 
       {!loading && data && (
         <div style={{display:"grid",gap:14}}>
