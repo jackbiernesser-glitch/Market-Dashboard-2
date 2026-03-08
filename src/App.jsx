@@ -5558,6 +5558,17 @@ export default function MarketDashboard(){
     setLastUpdate(new Date());setLoading(false);
   },[]);
 
+  // Silent background refresh — updates data without showing the loading screen
+  const refresh=useCallback(async()=>{
+    try {
+      const [mData,hData,nData]=await Promise.all([
+        loadMarketData(), loadHeatmapData(), loadNdxData()
+      ]);
+      setAllData(mData);setHeatData(hData);setNdxData(nData);
+      setLastUpdate(new Date());
+    } catch {}
+  },[]);
+
   // Load industry/factor/theme data in background after dashboard is visible
   const loadThematic=useCallback(async()=>{
     setThematicLoading(true);
@@ -5569,7 +5580,7 @@ export default function MarketDashboard(){
   },[]);
 
   useEffect(()=>{load();},[]);
-  useEffect(()=>{const id=setInterval(load,60000);return()=>clearInterval(id);},[load]);
+  useEffect(()=>{const id=setInterval(refresh,60000);return()=>clearInterval(id);},[refresh]);
   // Background fetch for industries/themes/factors — runs after dashboard is visible
   useEffect(()=>{loadThematic();},[]);
   useEffect(()=>{const id=setInterval(loadThematic,300000);return()=>clearInterval(id);},[loadThematic]);
